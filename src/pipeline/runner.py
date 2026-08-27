@@ -18,6 +18,28 @@ _stop = threading.Event()
 _thread: threading.Thread | None = None
 
 
+def requeue_stuck() -> int:
+    """Anything left mid-flight belongs back in the queue.
+
+    A recording is marked 'transcribing' before the work starts. If the process
+    dies in between -- a restart, the memory ceiling, a power cut -- that row
+    stays 'transcribing' forever: the worker only claims 'queued', so nothing
+    ever picks it up again and the interface shows a progress bar that will
+    never finish. Called once at startup, before the worker begins.
+    """
+    with cursor() as conn:
+        rows = conn.execute(
+            "SELECT id, title FROM recordings WHERE status = 'transcribing'").fetchall()
+        if rows:
+            conn.execute(
+                "UPDATE recordings SET status = 'queued', "
+                "failure = 'Interrupted before it finished; picked up again on restart.' "
+                "WHERE status = 'transcribing'")
+    for row in rows:
+        print(f"requeued interrupted recording {row['id']}: {row['title']}")
+    return len(rows)
+
+
 def claim_next() -> dict | None:
     """Take one queued recording and mark it in progress, atomically."""
     with cursor() as conn:
@@ -133,6 +155,7 @@ def start() -> None:
     global _thread
     if _thread and _thread.is_alive():
         return
+    requeue_stuck()
     _stop.clear()
     _thread = threading.Thread(target=_loop, name="enygma-worker", daemon=True)
     _thread.start()

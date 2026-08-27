@@ -40,6 +40,11 @@
     {% endfor %}
   </div>
 
+  <div class="spread" style="margin-top:var(--space-20)">
+    <button class="btn line sm" id="copymd" data-id="{{ r.id }}">Copy as Markdown</button>
+    <span class="label" id="copymsg"></span>
+  </div>
+
   <div class="tabs" role="tablist">
     <button role="tab" aria-selected="true" data-tab="summary">Summary</button>
     <button role="tab" aria-selected="false" data-tab="transcript">Transcript</button>

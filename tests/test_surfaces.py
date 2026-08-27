@@ -249,3 +249,80 @@ def test_healthz_reports_the_mark_alongside_the_build():
     assert body["mark"].startswith("Mk II."), body["mark"]
     assert body["version"].startswith(body["mark"].split(".")[-1] + "."), \
         "the build stamp should lead with the same commit number as the mark"
+
+
+def test_a_recording_interrupted_mid_transcription_is_picked_up_again():
+    """'transcribing' is set before the work starts. If the process dies in the
+    gap -- a restart, the memory ceiling, a power cut -- the worker only ever
+    claims 'queued', so that row would show a progress bar forever."""
+    from src.db import cursor
+    from src.pipeline import runner
+    with cursor() as conn:
+        conn.execute("INSERT INTO recordings (title, status, source, audio_path, sha256) "
+                     "VALUES ('Interrupted', 'transcribing', 'upload', 'x.mp3', 'stucksha')")
+        rid = conn.execute("SELECT last_insert_rowid() AS id").fetchone()["id"]
+
+    assert runner.requeue_stuck() >= 1
+    with cursor() as conn:
+        row = conn.execute("SELECT status, failure FROM recordings WHERE id = ?",
+                           (rid,)).fetchone()
+        conn.execute("DELETE FROM recordings WHERE id = ?", (rid,))
+    assert row["status"] == "queued"
+    assert "Interrupted" in row["failure"]
+
+
+def test_a_failing_backend_shows_a_reason_rather_than_hanging():
+    """The first real Gemini call is the first time that code path runs. If it
+    throws, the operator needs a sentence, not a spinner that never resolves."""
+    from src.db import cursor
+    from src.pipeline import runner
+
+    class Exploding:
+        def transcribe(self, path, mime):
+            raise RuntimeError("429 rate limit from the model")
+        def summarise(self, transcript):
+            raise AssertionError("should never get here")
+
+    with cursor() as conn:
+        conn.execute("INSERT INTO recordings (title, status, source, audio_path, sha256) "
+                     "VALUES ('Doomed', 'queued', 'upload', 'nope.mp3', 'doomsha')")
+        rid = conn.execute("SELECT last_insert_rowid() AS id").fetchone()["id"]
+
+    result = runner.process_one(backend=Exploding())
+    assert result["status"] == "failed"
+    assert "429 rate limit" in result["detail"]
+
+    page = client().get(f"/meetings/{rid}")
+    assert "429 rate limit" in page.text, "the reason must reach the screen"
+    assert "Try again" in page.text, "and the retry must be offered"
+    with cursor() as conn:
+        conn.execute("DELETE FROM recordings WHERE id = ?", (rid,))
+
+
+def test_copy_as_markdown_carries_the_timestamps_out_with_it():
+    """A summary pasted somewhere else is exactly where an unsourced claim does
+    damage, so every decision and question keeps the moment it came from."""
+    import importlib
+    from src.db import cursor
+    seed = importlib.import_module("tools.seed_demo")
+    seed.seed()
+    with cursor() as conn:
+        rid = conn.execute("SELECT id FROM recordings WHERE source='demo' "
+                           "AND status='ready' ORDER BY id").fetchone()["id"]
+
+    md = client().get(f"/meetings/{rid}/markdown")
+    assert md.status_code == 200
+    assert md.headers["content-type"].startswith("text/markdown")
+    body = md.text
+    assert body.startswith("# ")
+    assert "## Decisions" in body and "## Actions" in body
+    assert "`01:58`" in body, "decisions must carry their timestamp"
+    assert "- [ ] " in body, "actions should be checkboxes"
+    assert "not verified by the model" in body, "the caveat travels with the copy"
+    # A speaker label means nothing outside the app; resolve it where we can.
+    assert "Priya Raman" in body
+    seed.clear()
+
+
+def test_the_markdown_route_needs_a_session():
+    assert client(signed_in=False).get("/meetings/1/markdown").status_code in (302, 401, 404)

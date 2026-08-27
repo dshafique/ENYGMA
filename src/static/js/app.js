@@ -302,6 +302,38 @@ $("#retry")?.addEventListener("click", async (e) => {
   }
 }
 
+/* ------------------------------------------------------- copy as markdown */
+{
+  const button = $("#copymd");
+  const note = $("#copymsg");
+  button?.addEventListener("click", async () => {
+    const say = (t) => { if (note) { note.textContent = t;
+                         setTimeout(() => (note.textContent = ""), 2600); } };
+    try {
+      const res = await fetch(`/meetings/${button.dataset.id}/markdown`);
+      if (!res.ok) throw new Error(res.status);
+      const text = await res.text();
+      // navigator.clipboard needs a secure context. Over plain http on a LAN
+      // there is not one, so fall back rather than failing silently.
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+        say("Copied");
+      } else {
+        const box = document.createElement("textarea");
+        box.value = text;
+        box.style.cssText = "position:fixed;top:-1000px";
+        document.body.appendChild(box);
+        box.select();
+        const ok = document.execCommand("copy");
+        box.remove();
+        say(ok ? "Copied" : "Could not copy \u2014 open /markdown and select all");
+      }
+    } catch (e) {
+      say("Could not copy");
+    }
+  });
+}
+
 /* -------------------------------------------------------------- chat */
 {
   const convo = $("#convo");
