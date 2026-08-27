@@ -1668,3 +1668,659 @@ ENYGMA_GEMINI_API_KEY=AIza...</code></pre>
     passkey stops working immediately.
   </p>
 </section>
+
+<section class="page body-page">
+  <h1 class="chapter">Chapter 13 &nbsp;|&nbsp; Recovery procedures and threat model</h1>
+  <div class="chapter-meta"><span class="label">Part 4 · Access &amp; Auth</span><span>13</span></div>
+
+  <h2>Action: a device is lost or stolen</h2>
+  <p>From any signed-in device: <strong>Settings → Devices → Revoke</strong>. Immediate.</p>
+  <p>
+    If no other device is enrolled, sign in with the PIN first, then revoke, then
+    enrol the replacement. If the PIN is also unknown, use the shell procedure
+    below.
+  </p>
+
+  <h2>Action: locked out entirely</h2>
+  <p>
+    Shell access to the host is the ultimate authority. Nothing in the web
+    interface can prevent an operator with root from getting back in.
+  </p>
+  <pre class="term"><code><span class="prompt">$</span> sudo -u enygma bash -c "cd /home/enygma/app &amp;&amp; .venv/bin/python -c \
+  \"import sys; sys.path.insert(0,'.'); from src.auth import secrets_store as s; s.set_pin('482913')\""</code></pre>
+  <p>
+    Then sign in with that PIN and re-enrol. Change it afterwards from Settings —
+    a PIN that has been typed into a shell has been written to history.
+  </p>
+
+  <h2>Action: rotate the session signing secret</h2>
+  <p>
+    Signs every session out, everywhere, immediately. Passkeys and the PIN are
+    unaffected; only the cookies are invalidated.
+  </p>
+  <pre class="term"><code><span class="prompt">$</span> sudo -u enygma nano /home/enygma/app/.env     <span class="out"># replace ENYGMA_SESSION_SECRET</span>
+<span class="prompt">$</span> sudo systemctl restart enygma</code></pre>
+  <p>
+    Generate one with
+    <code>python3 -c "import secrets; print(secrets.token_urlsafe(48))"</code>.
+  </p>
+
+  <h2>Action: full auth reset</h2>
+  <div class="callout danger">
+    <span class="label">Warning</span>
+    This removes every passkey, the PIN and every outstanding setup code. The
+    next visitor to the site becomes the owner. Do it only with the site
+    unreachable, or immediately before enrolling.
+  </div>
+  <pre class="term"><code><span class="prompt">$</span> sudo systemctl stop enygma
+<span class="prompt">$</span> sudo -u enygma sqlite3 /home/enygma/app/data/enygma.db \
+  "DELETE FROM credentials; DELETE FROM pin; DELETE FROM pairing_codes; DELETE FROM auth_attempts;"
+<span class="prompt">$</span> sudo systemctl start enygma</code></pre>
+
+  <h2>Action: move to a new machine</h2>
+  <ol>
+    <li>Take a backup on the old host and copy it off.</li>
+    <li>Install on the new host, then stop the service.</li>
+    <li>Restore the database over the fresh one (Chapter 16).</li>
+    <li>Carry the <code>.env</code> across, or accept that a new session secret
+      signs everyone out once.</li>
+    <li>Repoint the tunnel and DNS so the origin is unchanged.</li>
+  </ol>
+  <div class="callout warn">
+    <span class="label">Warning</span>
+    Passkeys are bound to the origin, not the machine. Keep
+    <code>enygma.arkhm.io</code> and every enrolled device still works. Change the
+    hostname and every passkey is dead — plan the PIN before, not after.
+  </div>
+
+  <h2>Threat model</h2>
+  <table>
+    <tr><th>Threat</th><th>Mitigation</th><th>Residual</th></tr>
+    <tr><td>Password reuse, phishing</td><td>No password exists</td><td>None</td></tr>
+    <tr><td>Credential stuffing</td><td>Public keys only; nothing to replay</td><td>None</td></tr>
+    <tr><td>PIN brute force</td><td>Argon2id, shared counter, doubling lockout</td><td>Low. A 4-digit PIN costs more than a month of continuous attempts.</td></tr>
+    <tr><td>Stolen unlocked device</td><td>30-minute freshness window on writes</td><td>Reading is open for the cookie's life. Revoke the device.</td></tr>
+    <tr><td>Another account on the host</td><td>Mode 700 data, 750 home, own unix user</td><td>Root can read everything. Root is the operator.</td></tr>
+    <tr><td>Cookie scoped to a sibling site</td><td><code>__Host-</code> prefix forbids a Domain attribute</td><td>None. It is structurally impossible.</td></tr>
+    <tr><td>Transcript content at the model</td><td>Own project, paid tier, no training on paid data</td><td>Google processes the audio. This is the one unavoidable disclosure.</td></tr>
+    <tr><td>Transcript cached on a device</td><td>Service worker caches versioned static assets only</td><td>None. No HTML or API response is ever stored.</td></tr>
+    <tr><td>Disk failure</td><td>Nightly verified backups</td><td><strong>Real.</strong> Backups are on the same disk. See Chapter 16.</td></tr>
+  </table>
+</section>
+
+<section class="page body-page">
+  <h1 class="chapter">Chapter 14 &nbsp;|&nbsp; Installing as an app</h1>
+  <div class="chapter-meta"><span class="label">Part 4 · Access &amp; Auth</span><span>14</span></div>
+
+  <p class="lede">
+    ENYGMA is a progressive web app. Installed, it gets a launcher icon, its own
+    window with no browser chrome, and the phone's own share and multitasking
+    treatment.
+  </p>
+
+  <h2>Android, Chrome or Samsung Internet</h2>
+  <ol>
+    <li>Open <code>https://enygma.arkhm.io</code> and sign in.</li>
+    <li>Menu → <strong>Add to Home screen</strong> (or <em>Install app</em>).</li>
+    <li>Confirm. The cipher grid appears in the launcher.</li>
+  </ol>
+  <p>
+    On a Fold, the installed app follows the fold: the tab bar layout on the
+    cover screen, and more room on the inner display, with the nav rail appearing
+    once the window is wide enough.
+  </p>
+
+  <h2>iOS, Safari</h2>
+  <ol>
+    <li>Open the site in <strong>Safari</strong>. Other iOS browsers cannot install.</li>
+    <li>Share → <strong>Add to Home Screen</strong>.</li>
+  </ol>
+
+  <h2>What changes when installed</h2>
+  <table>
+    <tr><th>Aspect</th><th>Browser tab</th><th>Installed</th></tr>
+    <tr><td>Chrome</td><td>Address bar, tabs</td><td>None. Full height.</td></tr>
+    <tr><td>Launcher</td><td>A bookmark</td><td>An icon among the apps</td></tr>
+    <tr><td>Shortcuts</td><td>—</td><td>Long-press gives Meetings, Actions, Chat</td></tr>
+    <tr><td>Passkeys</td><td>Work</td><td>Work identically. Same origin, same credential.</td></tr>
+    <tr><td>Theme colour</td><td>—</td><td>Status bar follows light or dark</td></tr>
+  </table>
+
+  <h2>What the service worker does, and does not</h2>
+  <p>
+    It caches exactly one class of thing: requests to <code>/static/</code>
+    carrying a <code>?v=</code> build stamp, whose contents can never change.
+    That is what makes the app open instantly.
+  </p>
+  <p>
+    It never caches a page, an API response, audio, or anything under
+    <code>/auth</code>. Everything ENYGMA renders is private; a cached page is a
+    transcript sitting on the device's disk outside the file permissions that are
+    the entire isolation story, and still servable after a sign-out. Offline, the
+    app does not work — which is correct, because the data lives on a machine at
+    home and pretending otherwise would mean keeping a copy that should not exist.
+  </p>
+
+  <h2>Updating after a deployment</h2>
+  <p>
+    Nothing to do. Every asset URL carries the build, so a new release is a new
+    set of URLs and the old cache is discarded on activation. Closing and
+    reopening the app is enough; there is no cache to clear by hand.
+  </p>
+  <div class="callout scar">
+    <span class="label">Scar</span>
+    Before assets were addressed by build, a browser served a stylesheet cached
+    days earlier against new markup. The old file had no rule for the icons, and
+    an inline SVG with no width fills its container — so a 20-pixel icon rendered
+    as a 750-pixel chevron across the page. Icons now carry their own
+    <code>width</code> and <code>height</code> as attributes, so CSS is an
+    enhancement rather than load-bearing.
+  </div>
+</section>
+
+<!-- ═══════════════════ PART 5 ═══════════════════ -->
+<section class="dark part-divider">
+  <div class="label">Part Five</div>
+  <div>
+    <h1>Operating</h1>
+    <p class="summary">
+      Using it, protecting it, reading its failures, and knowing what has and
+      has not been proven.
+    </p>
+  </div>
+  <div class="toc-mini">
+    <div><span class="ch">15</span><span>Daily use</span></div>
+    <div><span class="ch">16</span><span>Backups and restore</span></div>
+    <div><span class="ch">17</span><span>Failure modes</span></div>
+    <div><span class="ch">18</span><span>Releases, and what is still unproven</span></div>
+  </div>
+</section>
+
+<section class="page body-page">
+  <h1 class="chapter">Chapter 15 &nbsp;|&nbsp; Daily use</h1>
+  <div class="chapter-meta"><span class="label">Part 5 · Operating</span><span>15</span></div>
+
+  <h2>After a meeting</h2>
+  <ol>
+    <li>Open ENYGMA, go to <strong>Meetings</strong>, drop the audio file on the
+      dropzone. Several at once is fine.</li>
+    <li>If you have been idle a while a sheet asks you to confirm it is you. Do
+      so; the upload continues by itself.</li>
+    <li>Watch it move <code>queued → transcribing → ready</code>. The page
+      refreshes itself while something on view is running.</li>
+    <li>Open it. Put real names on the speaker chips — this is the one thing the
+      system cannot do for you, and it is what makes the Directory and the action
+      owners meaningful.</li>
+  </ol>
+
+  <h2>Reading a meeting</h2>
+  <p>
+    <strong>Summary</strong> is the abstract, the decisions and the open
+    questions. Every timestamp is a button: it seeks the audio to that moment, so
+    any claim can be checked against what was actually said in about two seconds.
+  </p>
+  <p>
+    <strong>Transcript</strong> is the full record, with the current segment
+    highlighted as the audio plays. <strong>Actions</strong> is what was
+    committed to; ticking one here ticks it everywhere.
+  </p>
+
+  <h2>Looking a word up</h2>
+  <p>
+    Press and hold any word in the transcript for about half a second. A small
+    panel gives the definition. <em>Learn more</em> opens a Chat thread named for
+    that term with the question already asked, and the conversation carries on
+    from there.
+  </p>
+  <p>
+    This is the feature the system was built around. The words nobody stops to
+    define in a meeting are the highest-value thing in the recording for someone
+    still learning the domain.
+  </p>
+
+  <h2>Getting something out</h2>
+  <p>
+    <strong>Copy as Markdown</strong> on any meeting puts the whole thing on the
+    clipboard, timestamps intact, ready to paste anywhere. There is deliberately
+    no synchronisation to another system: two homes for one summary means neither
+    is trusted, and the half that makes ENYGMA worth having — the claim welded to
+    the moment, with the audio a click away — is the half that a pasted page
+    throws out.
+  </p>
+
+  <h2>Weekly, thirty seconds</h2>
+  <ul>
+    <li><strong>Actions</strong> — anything still open that should not be.</li>
+    <li><strong>Directory</strong> — any speaker still unnamed. The count is in
+      the subtitle.</li>
+    <li><code>journalctl -t enygma-backup -n 5</code> — backups still running.</li>
+  </ul>
+</section>
+
+<section class="page body-page">
+  <h1 class="chapter">Chapter 16 &nbsp;|&nbsp; Backups and restore</h1>
+  <div class="chapter-meta"><span class="label">Part 5 · Operating</span><span>16</span></div>
+
+  <p class="lede">
+    The database is the only thing here that cannot be reproduced. Audio can be
+    uploaded again; a transcript, a summary, a corrected speaker name and an
+    enrolled passkey cannot.
+  </p>
+
+  <h2>What is backed up, and what is not</h2>
+  <table>
+    <tr><th>Item</th><th>Backed up</th><th>Why</th></tr>
+    <tr><td><code>data/enygma.db</code></td><td>Yes, nightly</td><td>Everything the system has ever understood.</td></tr>
+    <tr><td><code>uploads/*</code></td><td><strong>No</strong></td><td>Large, and re-uploadable from wherever it came from. Copying 500&nbsp;MB files nightly onto the same disk buys very little.</td></tr>
+    <tr><td><code>.env</code></td><td>No</td><td>Two values, one of which should be rotated on any restore anyway.</td></tr>
+  </table>
+
+  <h2>Why not <code>cp</code></h2>
+  <p>
+    The database runs in WAL mode. A file copy taken while a write is in flight
+    is a torn database: it copies cleanly, it looks fine, and it fails on the day
+    you need it. <code>tools/backup.py</code> uses SQLite's own backup API, which
+    produces a consistent snapshot even mid-write.
+  </p>
+
+  <h2>Every backup is verified when taken</h2>
+  <p>
+    A backup nobody has restored is a hope, not a backup. Each one is
+    decompressed to a temporary file, opened, <code>PRAGMA integrity_check</code>
+    run, and every expected table counted — immediately, as part of taking it.
+  </p>
+  <pre class="term"><code><span class="prompt">$</span> sudo -u enygma sh -c "cd /home/enygma/app &amp;&amp; .venv/bin/python tools/backup.py"
+<span class="out">wrote enygma-20260827-045126.db.gz  (8 KB)
+restored enygma-20260827-045126.db.gz
+  integrity_check: ok
+  recordings             5
+  transcript_segments    27
+  credentials            1
+  the backup opens, passes integrity check and has every table.</span></code></pre>
+
+  <h2>Restoring</h2>
+  <pre class="term"><code><span class="prompt">$</span> sudo systemctl stop enygma
+<span class="prompt">$</span> sudo -u enygma sh -c "cd /home/enygma/app &amp;&amp; \
+    gunzip -c backups/enygma-20260827-045126.db.gz &gt; data/enygma.db"
+<span class="prompt">$</span> sudo systemctl start enygma</code></pre>
+  <p>
+    This procedure has been exercised, not assumed: a live database was
+    deliberately overwritten with garbage, SQLite confirmed it unreadable, and
+    the backup restored every recording, segment and action intact.
+  </p>
+
+  <div class="callout danger">
+    <span class="label">Warning</span>
+    The backups sit on the same NVMe as the database. That covers corruption, a
+    bad migration and an accidental delete. It does <strong>not</strong> cover
+    losing the disk. If this data matters beyond that, copy
+    <code>/home/enygma/app/backups</code> somewhere else on a schedule. The
+    system does not pretend to have solved this.
+  </div>
+
+  <h2>Retention</h2>
+  <p>
+    Fourteen nights by default; older ones are pruned as each new backup is
+    taken. Pass <code>--keep 30</code> to
+    <code>deploy/install-backups.sh</code> to change it.
+  </p>
+</section>
+
+<section class="page body-page">
+  <h1 class="chapter">Chapter 17 &nbsp;|&nbsp; Failure modes</h1>
+  <div class="chapter-meta"><span class="label">Part 5 · Operating</span><span>17</span></div>
+
+  <p class="lede">
+    What the system can tell you, and what each thing means. Every failure here
+    has actually happened.
+  </p>
+
+  <h2>On a meeting</h2>
+  <table>
+    <tr><th>Reason shown</th><th>Means</th><th>Do</th></tr>
+    <tr><td><code>RuntimeError: The Gemini SDK is not installed…</code></td>
+        <td>The virtualenv is missing <code>google-genai</code>.</td>
+        <td>Re-run the installer, which installs <code>requirements.txt</code>.</td></tr>
+    <tr><td><code>RuntimeError: ENYGMA_GEMINI_API_KEY is not set</code></td>
+        <td>Pipeline is <code>gemini</code> with no key.</td>
+        <td><code>check_env.py</code>, then set the key and restart.</td></tr>
+    <tr><td><code>JSONDecodeError</code></td>
+        <td>The model's response was malformed <em>and</em> nothing could be salvaged from it.</td>
+        <td>Run it again. If it repeats, the audio may be unusually long — see the note below.</td></tr>
+    <tr><td><code>Gemini returned nothing that could be read…</code></td>
+        <td>The model replied with prose, usually a refusal. The first 180 characters are quoted so you can see what it said.</td>
+        <td>Read the quote. Often the audio is silent or unreadable.</td></tr>
+    <tr><td>429 in the reason</td><td>Rate limited, or out of credit.</td>
+        <td>Check the billing balance. Retry.</td></tr>
+    <tr><td><em>Incomplete</em> banner, still readable</td>
+        <td>The response was cut off; what arrived was recovered. The note says how far it reached.</td>
+        <td>Run it again for the whole thing, or keep what you have.</td></tr>
+    <tr><td>Stuck on <code>transcribing</code> after a restart</td>
+        <td>Should not happen: interrupted recordings are requeued at startup.</td>
+        <td><code>sudo systemctl restart enygma</code> and watch the log.</td></tr>
+  </table>
+
+  <h2>On the way in</h2>
+  <table>
+    <tr><th>Symptom</th><th>Means</th><th>Do</th></tr>
+    <tr><td><em>Server Not Found</em></td>
+        <td>DNS. Either the record is missing, or it is not proxied, or the browser cached an old NXDOMAIN.</td>
+        <td><code>deploy/dns-record.sh</code>. In Firefox, <code>about:networking#dns</code> → Clear DNS Cache.</td></tr>
+    <tr><td>Cloudflare 502 or 1033</td><td>The tunnel is up but nothing is listening on 4073.</td>
+        <td><code>systemctl status enygma</code>.</td></tr>
+    <tr><td>Passkey prompt never appears</td><td>Origin mismatch: the browser's origin is not <code>ENYGMA_ORIGIN</code>.</td>
+        <td>Check both values in <code>check_env.py</code>. They must match exactly, scheme included.</td></tr>
+    <tr><td>A write does nothing</td><td>Should not happen: a stale session raises the sheet.</td>
+        <td>Reload. If it persists, the browser has a stale <code>app.js</code> — but assets are build-addressed, so this means the deployment did not land.</td></tr>
+    <tr><td><em>Locked for N seconds</em></td><td>Five failed attempts across all methods.</td>
+        <td>Wait. The delay doubles each round; a successful sign-in clears it.</td></tr>
+    <tr><td><em>That setup code is not valid or has expired</em></td>
+        <td>Wrong code, used code, or more than ten minutes old. A PIN typed here is named as such.</td>
+        <td>Mint a fresh one from a signed-in device.</td></tr>
+  </table>
+
+  <h2>On the host</h2>
+  <pre class="term"><code><span class="prompt">$</span> systemctl status enygma
+<span class="prompt">$</span> journalctl -u enygma -n 100 --no-pager
+<span class="prompt">$</span> journalctl -t enygma-backup -n 20
+<span class="prompt">$</span> journalctl -t enygma-disk -n 20
+<span class="prompt">$</span> curl -s https://enygma.arkhm.io/healthz</code></pre>
+
+  <div class="callout note">
+    <span class="label">Note</span>
+    <code>run.sh: ignoring non-assignment line in .env</code> in the log means
+    exactly what it says: something in <code>.env</code> is not
+    <code>KEY=VALUE</code> and was skipped. If it was a command you meant to run,
+    it never ran. Fix it with <code>check_env.py</code>.
+  </div>
+
+  <h2>Long meetings</h2>
+  <p>
+    The model's output ceiling bounds how long a single transcript can be. A very
+    long recording can exhaust it; the salvage path recovers what arrived and the
+    meeting carries a note saying how far it reached. Raise
+    <code>ENYGMA_MAX_OUTPUT_TOKENS</code> if this happens routinely, and consider
+    splitting recordings longer than about ninety minutes.
+  </p>
+</section>
+
+<section class="page body-page">
+  <h1 class="chapter">Chapter 18 &nbsp;|&nbsp; Releases, and what is still unproven</h1>
+  <div class="chapter-meta"><span class="label">Part 5 · Operating</span><span>18</span></div>
+
+  <h2>The mark</h2>
+  <p>
+    <strong>Mk II.N</strong>, where N is the commit count of the repository the
+    build came from. It is in the top right of every screen, in Settings, and at
+    <code>/healthz</code>. A manual and a running system can always be checked
+    against each other in one glance.
+  </p>
+  <p>
+    <code>VERSION</code> also leads with N and is appended to every static asset
+    URL, so a browser cannot serve a cached stylesheet against newer markup.
+  </p>
+
+  <h2>Shipping a change</h2>
+  <pre class="term"><code><span class="prompt">$</span> cd ~/enygma-release &amp;&amp; git pull
+<span class="prompt">$</span> python3 tools/stamp_release.py
+<span class="prompt">$</span> sudo bash deploy/install-on-spark.sh</code></pre>
+  <p>
+    The installer runs the token lint, the environment check and the full test
+    suite as the application user before it restarts anything. A failure leaves
+    the previous version running.
+  </p>
+
+  <h2>What is proven</h2>
+  <ul>
+    <li><strong>Isolation.</strong> Verified by attempting the read as another account.</li>
+    <li><strong>Restore.</strong> Verified by destroying a live database and bringing it back.</li>
+    <li><strong>Re-authentication.</strong> Verified by driving a genuinely stale session in a browser.</li>
+    <li><strong>The worker's failure path.</strong> Verified with a backend that throws.</li>
+    <li><strong>Truncation salvage.</strong> Verified against the exact response that failed.</li>
+    <li><strong>The service worker's discretion.</strong> Verified by reading the cache after loading a meeting.</li>
+  </ul>
+
+  <h2>What is not</h2>
+  <div class="callout warn">
+    <span class="label">Warning</span>
+    <strong>Speaker attribution has never been measured.</strong> Labels come
+    from asking a model politely in a prompt, not from a diarization system. They
+    are a claim, not a measurement. Nobody has checked them against a known-good
+    reference. For an operator reading his own meetings this is a fixable
+    annoyance; before a name from here is quoted to anybody else, it should be
+    verified by ear.
+  </div>
+  <ul>
+    <li><strong>Transcript accuracy</strong> has not been compared against a
+      reference transcript of the same audio.</li>
+    <li><strong>Long recordings</strong> — the practical duration ceiling has not
+      been established, only that one exists.</li>
+    <li><strong>Off-machine backup</strong> does not exist. Disk failure is total
+      loss.</li>
+    <li><strong>The consent conversation</strong> about recording an employer's
+      meetings is a matter between the operator and the people in the room, and
+      no amount of engineering settles it.</li>
+  </ul>
+
+  <div class="callout note">
+    <span class="label">Note</span>
+    This chapter should shrink with each edition. A manual that claims everything
+    works is a manual nobody has tested.
+  </div>
+</section>
+
+<!-- ═══════════════════ APPENDICES ═══════════════════ -->
+<section class="dark part-divider">
+  <div class="label">Appendices</div>
+  <div>
+    <h1>Reference</h1>
+    <p class="summary">
+      Every knob, every route, the shape of the source tree, and the list of
+      decisions that look strange until you know what caused them.
+    </p>
+  </div>
+  <div class="toc-mini">
+    <div><span class="ch">A</span><span>Environment variables</span></div>
+    <div><span class="ch">B</span><span>HTTP surface</span></div>
+    <div><span class="ch">C</span><span>Source tree map</span></div>
+    <div><span class="ch">D</span><span>The scar list</span></div>
+  </div>
+</section>
+
+<section class="page body-page">
+  <h1 class="chapter">Appendix A &nbsp;|&nbsp; Environment variables</h1>
+  <div class="chapter-meta"><span class="label">Reference</span><span>A</span></div>
+  <p>Every value the application reads. Extracted from <code>src/config.py</code> at this edition.</p>
+
+  <table>
+    <tr><th>Variable</th><th>Default</th><th>Meaning</th></tr>
+    <tr><td><code>ENYGMA_PORT</code></td><td><code>4073</code></td><td>Loopback port. PHNTM holds 4063.</td></tr>
+    <tr><td><code>ENYGMA_HOST</code></td><td><code>127.0.0.1</code></td><td>Bind address. Loopback only; the tunnel is the way in.</td></tr>
+    <tr><td><code>ENYGMA_RP_ID</code></td><td><code>enygma.arkhm.io</code></td><td>WebAuthn relying party. Must equal the browser's hostname.</td></tr>
+    <tr><td><code>ENYGMA_RP_NAME</code></td><td><code>ENYGMA</code></td><td>What the passkey prompt calls this site.</td></tr>
+    <tr><td><code>ENYGMA_ORIGIN</code></td><td><code>https://enygma.arkhm.io</code></td><td>Exact origin, scheme included. A mismatch means no passkey prompt.</td></tr>
+    <tr><td><code>ENYGMA_SESSION_SECRET</code></td><td><em>required</em></td><td>Signs the session cookie. Its own, never PHNTM's. Changing it signs everyone out.</td></tr>
+    <tr><td><code>ENYGMA_REAUTH_MINUTES</code></td><td><code>30</code></td><td>How long a session stays fresh enough to write.</td></tr>
+    <tr><td><code>ENYGMA_INSECURE_COOKIES</code></td><td><code>0</code></td><td>Drops <code>__Host-</code> and <code>Secure</code>. Local http development only.</td></tr>
+    <tr><td><code>ENYGMA_TZ</code></td><td><em>machine's zone</em></td><td>Display timezone. Storage is always UTC.</td></tr>
+    <tr><td><code>ENYGMA_PIPELINE</code></td><td><code>stub</code></td><td><code>stub</code> or <code>gemini</code>. Stub needs no key and no network.</td></tr>
+    <tr><td><code>ENYGMA_GEMINI_API_KEY</code></td><td><em>required for gemini</em></td><td>Its own key, in its own project, on the paid tier.</td></tr>
+    <tr><td><code>ENYGMA_GEMINI_MODEL</code></td><td><code>gemini-3.5-flash</code></td><td>Switching models is this line and a restart.</td></tr>
+    <tr><td><code>ENYGMA_MAX_OUTPUT_TOKENS</code></td><td><code>65536</code></td><td>Output ceiling. Too low truncates long transcripts.</td></tr>
+    <tr><td><code>ENYGMA_MAX_UPLOAD_MB</code></td><td><code>500</code></td><td>Per-file limit, checked before a byte is written.</td></tr>
+    <tr><td><code>ENYGMA_WORKER_POLL_SECONDS</code></td><td><code>3</code></td><td>How long an idle worker waits before looking again.</td></tr>
+    <tr><td><code>ENYGMA_HINOTES_ENABLED</code></td><td><code>0</code></td><td>The recorder poller. Gated off; audio arrives by drag and drop.</td></tr>
+  </table>
+  <div class="callout note">
+    <span class="label">Note</span>
+    Modules are gated in configuration, never deleted. The HiNotes poller is
+    switched off, not removed, so turning it back on is one line rather than an
+    archaeology exercise.
+  </div>
+</section>
+
+<section class="page body-page">
+  <h1 class="chapter">Appendix B &nbsp;|&nbsp; HTTP surface</h1>
+  <div class="chapter-meta"><span class="label">Reference</span><span>B</span></div>
+  <p>
+    38 routes. <strong>View</strong> needs a session of any age;
+    <strong>Write</strong> needs one inside the freshness window;
+    <strong>Open</strong> needs none.
+  </p>
+
+  <table>
+    <tr><th>Method</th><th>Path</th><th>Auth</th><th>Purpose</th></tr>
+    <tr><td>GET</td><td><code>/healthz</code></td><td>Open</td><td>Liveness, build and mark.</td></tr>
+    <tr><td>GET</td><td><code>/lock</code></td><td>Open</td><td>The lock screen.</td></tr>
+    <tr><td>GET</td><td><code>/sw.js</code>, <code>/manifest.webmanifest</code></td><td>Open</td><td>PWA. Must be at the root to control scope.</td></tr>
+    <tr><td>GET</td><td><code>/</code></td><td>View</td><td>Home.</td></tr>
+    <tr><td>GET</td><td><code>/meetings</code>, <code>/meetings/{id}</code></td><td>View</td><td>List and reader.</td></tr>
+    <tr><td>GET</td><td><code>/meetings/{id}/audio</code></td><td>View</td><td>Streams the recording.</td></tr>
+    <tr><td>GET</td><td><code>/meetings/{id}/markdown</code></td><td>View</td><td>The copy-out.</td></tr>
+    <tr><td>GET</td><td><code>/actions</code>, <code>/directory</code>, <code>/settings</code></td><td>View</td><td>The remaining tabs.</td></tr>
+    <tr><td>GET</td><td><code>/chat</code>, <code>/chat/{id}</code></td><td>View</td><td>Threads.</td></tr>
+    <tr><td>GET</td><td><code>/api/term?q=</code></td><td>View</td><td>Glossary lookup behind the popover.</td></tr>
+    <tr><td>GET</td><td><code>/api/meetings</code></td><td>View</td><td>The listing as JSON.</td></tr>
+    <tr><td>GET</td><td><code>/auth/devices</code></td><td>View</td><td>Enrolled passkeys.</td></tr>
+    <tr><td>POST</td><td><code>/upload</code></td><td>Write</td><td>One or many audio files.</td></tr>
+    <tr><td>POST</td><td><code>/meetings/{id}/retry</code></td><td>Write</td><td>Requeue without re-uploading.</td></tr>
+    <tr><td>POST</td><td><code>/meetings/{id}/speaker</code></td><td>Write</td><td>Put a name on a label.</td></tr>
+    <tr><td>POST</td><td><code>/actions/{id}/toggle</code></td><td>Write</td><td>Tick or untick.</td></tr>
+    <tr><td>POST</td><td><code>/chat/new</code>, <code>/chat/from-term</code>, <code>/chat/{id}/say</code></td><td>Write</td><td>Start a thread, or one turn of it.</td></tr>
+    <tr><td>POST</td><td><code>/directory/{name}</code></td><td>Write</td><td>Role, org and note for a person.</td></tr>
+    <tr><td>POST</td><td><code>/auth/pin/set</code>, <code>/auth/pin/clear</code></td><td>Write</td><td>Manage the PIN.</td></tr>
+    <tr><td>POST</td><td><code>/auth/pairing/new</code></td><td>Write</td><td>Mint a setup code. Fresh session required.</td></tr>
+    <tr><td>POST</td><td><code>/auth/devices/{id}/revoke</code></td><td>Write</td><td>Revoke a passkey.</td></tr>
+    <tr><td>POST</td><td><code>/auth/register/*</code>, <code>/auth/login/*</code></td><td>Open*</td><td>WebAuthn. Registration is open only while nothing is enrolled.</td></tr>
+    <tr><td>POST</td><td><code>/auth/pin/verify</code>, <code>/auth/pairing/redeem</code></td><td>Open</td><td>Rate limited by the shared counter.</td></tr>
+    <tr><td>POST</td><td><code>/auth/logout</code></td><td>Open</td><td>Clears the cookie.</td></tr>
+  </table>
+
+  <div class="callout note">
+    <span class="label">Note</span>
+    A 401 carries a machine-readable reason: <code>locked</code> sends the browser
+    to the lock screen, <code>stale</code> raises the re-auth sheet and retries.
+    A request that says it accepts HTML gets an error page; anything else gets
+    JSON, because a <code>fetch()</code> receiving HTML fails in a way that is far
+    harder to read.
+  </div>
+</section>
+
+<section class="page body-page">
+  <h1 class="chapter">Appendix C &nbsp;|&nbsp; Source tree map</h1>
+  <div class="chapter-meta"><span class="label">Reference</span><span>C</span></div>
+
+  <pre><code>enygma/
+├── run.sh                     parses .env, never sources it; starts uvicorn
+├── requirements.txt           pinned, including google-genai
+├── VERSION  MARK              build artifacts, not in the repository
+│
+├── src/
+│   ├── config.py              every value from the environment
+│   ├── db.py                  connection and the migration runner
+│   ├── main.py                routes; require_view vs require_session
+│   ├── fmt.py                 timestamps: stored UTC, shown local
+│   ├── meetings.py            the read layer for recordings
+│   ├── home.py  actions.py  directory.py  chat.py  glossary.py
+│   ├── export.py              one meeting as Markdown
+│   │
+│   ├── migrations/            forever-additive, applied in filename order
+│   │   ├── 001_init.sql       recordings, operator, ingest log
+│   │   ├── 002_passkeys.sql   credentials, challenges, pin, recovery
+│   │   ├── 003_uploads…       segments, speakers, summaries, actions
+│   │   ├── 004_workspace.sql  people, chat, terms, observations, tidbits
+│   │   ├── 005_pairing.sql    setup codes
+│   │   └── 006_notes.sql      a non-fatal remark on a recording
+│   │
+│   ├── auth/
+│   │   ├── passkeys.py        WebAuthn registration and assertion
+│   │   ├── session.py         __Host- cookie and the freshness window
+│   │   ├── attempts.py        one counter for every method, doubling delay
+│   │   └── secrets_store.py   Argon2id: PIN, setup codes, recovery
+│   │
+│   ├── ingest/upload.py       stream, hash and dedupe in one pass
+│   ├── pipeline/
+│   │   ├── base.py            Segment, Transcript, Summary
+│   │   ├── stub.py            no key, no network, deterministic
+│   │   ├── gemini.py          json mode, output ceiling, salvage parser
+│   │   └── runner.py          the worker; requeues interrupted jobs
+│   │
+│   ├── templates/             base is the shell; _meeting is the reader
+│   └── static/
+│       ├── css/tokens.css     GENERATED. Never edited by hand.
+│       ├── css/app.css        references only, no raw hex
+│       ├── js/app.js          one module; every write goes through send()
+│       ├── sw.js              versioned static assets only
+│       └── icons/             generated from the mark specification
+│
+├── tools/
+│   ├── gen_tokens.py          the palette, and the only place hex appears
+│   ├── check_tokens.py        fails the build on an undefined var()
+│   ├── check_env.py           .env sanity, secrets masked
+│   ├── backup.py              SQLite backup API, verified on every run
+│   ├── seed_demo.py           a demo week; --clear removes it
+│   ├── gen_icons.py           PWA icons from the mark
+│   └── stamp_release.py       VERSION and MARK from the commit count
+│
+├── deploy/
+│   ├── install-on-spark.sh    idempotent; tests before it restarts
+│   ├── install-backups.sh     nightly, and proves the schedule runs
+│   ├── enygma.service         own user, MemoryMax, ProtectSystem=strict
+│   ├── add-tunnel-route.sh    backs up and validates the cloudflared config
+│   ├── dns-record.sh          read-only; prints the record required
+│   └── disk-ceiling.sh        quota if possible, hourly alarm otherwise
+│
+├── tests/                     87 tests
+└── docs/manual/               this document</code></pre>
+</section>
+
+<section class="page body-page">
+  <h1 class="chapter">Appendix D &nbsp;|&nbsp; The scar list</h1>
+  <div class="chapter-meta"><span class="label">Reference</span><span>D</span></div>
+
+  <p class="lede">
+    Every one of these looks like an odd decision until you know what caused it.
+    They are collected here because this is the appendix that will save the next
+    person the most time.
+  </p>
+
+  <table>
+    <tr><th>What happened</th><th>What it now does</th></tr>
+    <tr><td><code>adduser</code> left the home directory world-readable, so another account on the machine could read every recording and the database.</td>
+        <td>The installer chmods 750 and 700, then <em>proves</em> it by attempting the read as another account.</td></tr>
+    <tr><td>A semicolon inside an English sentence in a migration comment ended the statement early; the rest of the prose became SQL and failed as <code>near "the": syntax error</code>.</td>
+        <td>Comments are stripped before splitting on semicolons, respecting quoted strings.</td></tr>
+    <tr><td>CSS referenced custom properties that nothing defined. The declarations were silently dropped and a layout collapsed with nothing in the console.</td>
+        <td><code>check_tokens.py</code> fails the build on any unresolved <code>var()</code>. The installer runs it.</td></tr>
+    <tr><td>A route rendered a template nobody had looked at in weeks, because every test called the page beneath it directly.</td>
+        <td>Every page is requested over HTTP in the suite, and a test asserts every template <code>main.py</code> names exists.</td></tr>
+    <tr><td>An install re-deployed a stale extraction and reported complete success. It was three days behind.</td>
+        <td>Every build carries a mark. The installer announces what it is installing and what it is replacing; <code>/healthz</code> reports it.</td></tr>
+    <tr><td><code>cloudflared</code> exited 0 on a usage error, so a script reported "ingress rules are valid" having validated nothing.</td>
+        <td>The script reads the command's output, and restores its backup unless it finds explicit success.</td></tr>
+    <tr><td>A browser served a stylesheet cached days earlier against new markup. Icons had no width rule, and an inline SVG with no width fills its container — a 20px icon became a 750px chevron.</td>
+        <td>Every asset URL carries the build. Icons also carry <code>width</code> and <code>height</code> attributes, so CSS is an enhancement rather than load-bearing.</td></tr>
+    <tr><td><code>run.sh</code> sourced <code>.env</code>, so every line executed as the application user. A pasted command block landed in that file.</td>
+        <td><code>.env</code> is parsed as <code>KEY=VALUE</code>. Anything else is named on stderr and ignored.</td></tr>
+    <tr><td>A stale session made an upload return 401, which was parsed as an empty result list and rendered as nothing at all. The file appeared to vanish.</td>
+        <td>The re-auth sheet, and one wrapper around every write that either succeeds, re-authenticates and retries, or says what went wrong.</td></tr>
+    <tr><td><code>google-genai</code> was never in <code>requirements.txt</code>. The real pipeline had never once been capable of running.</td>
+        <td>Pinned, with a test asserting it is declared, and an import error that names the command to fix it.</td></tr>
+    <tr><td>Inline audio was sent as raw bytes instead of base64, which fails at the transport, so the error would never have mentioned audio.</td>
+        <td>Base64, with every payload shape probed against the SDK's own request normaliser in a test.</td></tr>
+    <tr><td>SQLite stores UTC. The screen also showed UTC, so a meeting recorded at ten past midnight read <em>5:11 AM</em>.</td>
+        <td>Stored UTC, rendered in the machine's zone, overridable with <code>ENYGMA_TZ</code>.</td></tr>
+    <tr><td>A long transcript came back cut off. Asking for one large JSON document meant a single bad character discarded the entire meeting.</td>
+        <td>Constrained JSON decoding, a raised output ceiling, and a salvage parser that keeps every segment that arrived.</td></tr>
+    <tr><td>A recording is marked <code>transcribing</code> before work starts. A crash in that gap left it there forever, showing a progress bar that could never finish.</td>
+        <td><code>requeue_stuck()</code> at startup returns them to the queue with a note.</td></tr>
+    <tr><td>The setup-code field answered every possible mistake — a typo, an expired code, a used code, a PIN — with the same sentence.</td>
+        <td>A four-digit entry is named as a PIN; a wrong length says what the length should be.</td></tr>
+  </table>
+
+  <div class="divider"></div>
+  <p class="center label">End of Volume I</p>
+</section>
+
+</body>
+</html>

@@ -238,3 +238,95 @@ def test_a_salvaged_transcript_tells_the_operator_it_is_incomplete():
     assert 0 < len(out.segments) < 89
     assert out.note and "cut off" in out.note
     assert "Re-run" in out.note
+
+
+def test_the_request_carries_a_schema_so_malformed_json_is_impossible():
+    import json, pathlib, tempfile
+    from src.pipeline.gemini import GeminiBackend, TRANSCRIPT_SCHEMA
+    seen = {}
+
+    class Fake:
+        class files:
+            @staticmethod
+            def upload(file): raise AssertionError("inline expected")
+        class interactions:
+            @staticmethod
+            def create(**kw):
+                seen.update(kw)
+                class R: output_text = json.dumps({"segments": [
+                    {"speaker": "SPEAKER 1", "start": "00:00", "end": "00:04", "text": "ok"}]})
+                return R()
+
+    audio = pathlib.Path(tempfile.mkdtemp()) / "m.mp3"
+    audio.write_bytes(b"ID3" + b"\x02" * 128)
+    GeminiBackend(client=Fake()).transcribe(audio, "audio/mpeg")
+
+    fmt = seen["response_format"]
+    assert fmt["type"] == "text"
+    assert fmt["mime_type"] == "application/json"
+    assert fmt["schema"] == TRANSCRIPT_SCHEMA
+    assert seen["generation_config"]["max_output_tokens"] >= 8192
+    # response_mime_type on its own is what produced
+    # "responseFormat must be set when responseMimeType is set".
+    assert "response_mime_type" not in seen
+
+
+def test_a_rejected_request_key_costs_a_retry_not_the_transcription():
+    """The audio has already been uploaded by this point. A wrong guess about the
+    request's shape must never be what loses the meeting."""
+    import json, pathlib, tempfile
+    from src.pipeline.gemini import GeminiBackend
+    calls = []
+
+    class Picky:
+        class files:
+            @staticmethod
+            def upload(file): raise AssertionError("inline expected")
+        class interactions:
+            @staticmethod
+            def create(**kw):
+                calls.append(sorted(kw))
+                if "response_format" in kw or "generation_config" in kw:
+                    raise RuntimeError(
+                        "Error code: 400 - {'error': {'code': 'invalid_request'}}")
+                class R: output_text = json.dumps({"segments": [
+                    {"speaker": "SPEAKER 1", "start": "00:00", "end": "00:07",
+                     "text": "recovered anyway"}]})
+                return R()
+
+    audio = pathlib.Path(tempfile.mkdtemp()) / "m.mp3"
+    audio.write_bytes(b"ID3" + b"\x03" * 128)
+    backend = GeminiBackend(client=Picky())
+    out = backend.transcribe(audio, "audio/mpeg")
+
+    assert len(calls) == 2, "one constrained attempt, one plain retry"
+    assert calls[1] == ["input", "model"], "the retry is the minimum request"
+    assert out.segments[0].text == "recovered anyway"
+    assert backend.degraded and "invalid_request" in backend.degraded
+
+
+def test_a_real_failure_is_not_retried_and_not_swallowed():
+    """Only request-shape rejections are worth a second call. Retrying a rate
+    limit or an auth failure just uploads the audio twice."""
+    import pathlib, tempfile
+    from src.pipeline.gemini import GeminiBackend
+    calls = []
+
+    class Broken:
+        class files:
+            @staticmethod
+            def upload(file): raise AssertionError("inline expected")
+        class interactions:
+            @staticmethod
+            def create(**kw):
+                calls.append(kw)
+                raise RuntimeError("429 RESOURCE_EXHAUSTED: quota exceeded")
+
+    audio = pathlib.Path(tempfile.mkdtemp()) / "m.mp3"
+    audio.write_bytes(b"ID3" + b"\x04" * 128)
+    try:
+        GeminiBackend(client=Broken()).transcribe(audio, "audio/mpeg")
+        raise AssertionError("should have raised")
+    except RuntimeError as exc:
+        assert "429" in str(exc)
+    assert len(calls) == 1, "a rate limit must not be retried"

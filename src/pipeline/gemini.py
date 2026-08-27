@@ -68,6 +68,64 @@ def _ms(stamp: str | None) -> int | None:
     return ((int(hours or 0) * 3600) + int(minutes) * 60 + int(seconds)) * 1000
 
 
+# The shape the model is *constrained* to produce. Schema-guided decoding means
+# malformed JSON is not a thing that can come back; only truncation can, and the
+# salvage parser below handles that.
+TRANSCRIPT_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "segments": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "speaker": {"type": "string"},
+                    "start": {"type": "string"},
+                    "end": {"type": "string"},
+                    "text": {"type": "string"},
+                },
+                "required": ["speaker", "start", "end", "text"],
+            },
+        }
+    },
+    "required": ["segments"],
+}
+
+_ITEM = {
+    "type": "object",
+    "properties": {"text": {"type": "string"}, "at": {"type": "string"}},
+    "required": ["text", "at"],
+}
+SUMMARY_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "abstract": {"type": "string"},
+        "decisions": {"type": "array", "items": _ITEM},
+        "questions": {"type": "array", "items": _ITEM},
+        "actions": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "text": {"type": "string"},
+                    "owner": {"type": "string"},
+                    "at": {"type": "string"},
+                },
+                "required": ["text", "at"],
+            },
+        },
+    },
+    "required": ["abstract", "decisions", "questions", "actions"],
+}
+
+# Errors that mean "the request shape was wrong", as opposed to "the request was
+# fine and something else failed". Only the first kind is worth retrying.
+_SHAPE_ERROR = re.compile(
+    r"invalid_request|unexpected keyword|unknown field|must be set|400",
+    re.I,
+)
+
+
 def _unfence(text: str) -> str:
     """Models fence JSON in markdown more often than not."""
     cleaned = (text or "").strip()
@@ -142,6 +200,8 @@ class GeminiBackend(Backend):
     def __init__(self, client=None):
         self._client = client
         self.model = config.GEMINI_MODEL
+        # Set when the constrained request was refused and the plain one was used.
+        self.degraded: str | None = None
 
     def _get_client(self):
         if self._client is None:
@@ -159,29 +219,33 @@ class GeminiBackend(Backend):
             self._client = genai.Client(api_key=config.gemini_key())
         return self._client
 
-    def _ask(self, parts: list, json_mode: bool = True) -> str:
-        """One call.
+    def _ask(self, parts: list, schema: dict | None = None) -> str:
+        """One call, with the constraints if they are accepted and without if not.
 
-        json_mode constrains decoding so the model cannot emit anything that is
-        not syntactically valid JSON. The output ceiling is raised because the
-        failure it prevents -- a transcript cut off mid-token -- is indistinguish-
-        able from the model simply being wrong.
+        A schema makes malformed JSON impossible; the raised ceiling makes
+        truncation unlikely. Both are optional extras on the request, and an API
+        that rejects an extra must not cost a transcription -- especially not one
+        where the audio has already been uploaded. So: try the constrained
+        request, and on a rejection that is specifically about the request's
+        shape, fall back to the minimum request that is known to work.
         """
         client = self._get_client()
-        request = {
-            "model": self.model,
-            "input": parts,
-            "generation_config": {"max_output_tokens": config.MAX_OUTPUT_TOKENS},
-        }
-        if json_mode:
-            request["response_mime_type"] = "application/json"
+        minimum = {"model": self.model, "input": parts}
+        request = dict(minimum,
+                       generation_config={"max_output_tokens": config.MAX_OUTPUT_TOKENS})
+        if schema is not None:
+            request["response_format"] = {
+                "type": "text",
+                "mime_type": "application/json",
+                "schema": schema,
+            }
         try:
-            interaction = client.interactions.create(**request)
-        except TypeError:
-            # An older or newer SDK may not accept every key. Losing the ceiling
-            # is worth far less than losing the call, so retry without the extras.
-            interaction = client.interactions.create(model=self.model, input=parts)
-        return interaction.output_text
+            return client.interactions.create(**request).output_text
+        except Exception as exc:
+            if not _SHAPE_ERROR.search(str(exc)):
+                raise
+            self.degraded = f"{type(exc).__name__}: {exc}"[:200]
+            return client.interactions.create(**minimum).output_text
 
     def transcribe(self, audio_path, mime: str) -> Transcript:
         path = Path(audio_path)
@@ -200,7 +264,8 @@ class GeminiBackend(Backend):
                 "mime_type": mime,
             }
 
-        raw = self._ask([{"type": "text", "text": TRANSCRIBE_PROMPT}, audio_part])
+        raw = self._ask([{"type": "text", "text": TRANSCRIBE_PROMPT}, audio_part],
+                        schema=TRANSCRIPT_SCHEMA)
         rows, salvaged = segments_from(raw)
         segments = [
             Segment(
@@ -226,7 +291,8 @@ class GeminiBackend(Backend):
         return Transcript(segments=segments, model=self.model, note=note)
 
     def summarise(self, transcript: Transcript) -> Summary:
-        raw = self._ask([{"type": "text", "text": SUMMARISE_PROMPT + transcript.as_text()}])
+        raw = self._ask([{"type": "text", "text": SUMMARISE_PROMPT + transcript.as_text()}],
+                        schema=SUMMARY_SCHEMA)
         try:
             payload = _json_from(raw)
         except (ValueError, json.JSONDecodeError):
