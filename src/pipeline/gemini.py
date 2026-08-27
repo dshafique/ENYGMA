@@ -256,25 +256,27 @@ class GeminiBackend(Backend):
 
         if total is None or total <= limit or not chunking.have_ffmpeg():
             transcript = self._transcribe_one(path, mime)
+            extra = None
             if total is None:
                 # The dangerous case: with no duration there is no way to know
                 # whether this recording needed splitting, so it was not split.
                 # Saying nothing here is how a half-wrong transcript looks right.
-                transcript.note = (
+                extra = (
                     "The length of this recording could not be measured, because "
                     "ffprobe is not installed, so it was transcribed in one piece. "
-                    "If it runs past " f"{config.CHUNK_MINUTES} minutes, speaker "
+                    f"If it runs past {config.CHUNK_MINUTES} minutes, speaker "
                     "attribution after that point is not trustworthy and the "
                     "transcript may thin out. Install ffmpeg and run it again."
                 )
             elif total > limit and not chunking.have_ffmpeg():
-                transcript.note = (
+                extra = (
                     f"This recording is {total // 60000} minutes long. Speaker "
                     f"attribution is only reliable for the first {config.CHUNK_MINUTES}, "
                     "and ffmpeg is not installed on this host so it could not be "
                     "split. Install ffmpeg and run it again for correct speakers "
                     "throughout."
                 )
+            transcript.note = " ".join(x for x in (transcript.note, extra) if x) or None
             return transcript
 
         return self._transcribe_windowed(path, mime, total)

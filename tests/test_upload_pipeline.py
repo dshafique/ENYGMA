@@ -529,3 +529,36 @@ def test_an_unmeasurable_recording_says_so_rather_than_transcribing_blind():
 
     assert out.note, "an unmeasurable recording must carry a warning"
     assert "ffprobe" in out.note and "not trustworthy" in out.note
+
+
+def test_two_different_warnings_about_one_recording_both_survive():
+    """A truncated transcript on an unmeasurable file has two things worth
+    saying. Writing one note over the other loses whichever came first."""
+    import pathlib, tempfile, json
+    from src.pipeline import chunking, gemini
+
+    whole = json.dumps({"segments": [
+        {"speaker": "SPEAKER 1", "start": "00:00", "end": "00:05", "text": f"Line {i}."}
+        for i in range(60)]})
+
+    class Cut:
+        class files:
+            @staticmethod
+            def upload(file): raise AssertionError("inline expected")
+        class interactions:
+            @staticmethod
+            def create(**kw):
+                class R: output_text = whole[:1500]
+                return R()
+
+    audio = pathlib.Path(tempfile.mkdtemp()) / "m.mp3"
+    audio.write_bytes(b"ID3" + b"\x0b" * 256)
+    real = chunking.duration_ms
+    chunking.duration_ms = lambda p: None
+    try:
+        out = gemini.GeminiBackend(client=Cut()).transcribe(audio, "audio/mpeg")
+    finally:
+        chunking.duration_ms = real
+
+    assert "cut off" in out.note, "the truncation warning must survive"
+    assert "ffprobe" in out.note, "the unmeasurable warning must survive"
