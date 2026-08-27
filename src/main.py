@@ -21,6 +21,7 @@ from .db import migrate, cursor
 from .auth import session, passkeys, attempts, secrets_store
 from .ingest import poller, upload
 from .pipeline import runner
+from .export import as_markdown
 from . import (meetings as meetings_repo, actions as actions_repo,
                directory as directory_repo, chat as chat_repo, glossary,
                home as home_repo, fmt)
@@ -289,6 +290,16 @@ def meeting_page(recording_id: int, request: Request):
     if data is None:
         raise HTTPException(status_code=404, detail="No such recording")
     return page(request, "meetings.html", "meetings", _meetings_context(data))
+
+
+@app.get("/meetings/{recording_id}/markdown")
+def meeting_markdown(recording_id: int, request: Request):
+    """The escape hatch. One meeting, readable anywhere, timestamps intact."""
+    require_session(request)
+    data = meetings_repo.detail(recording_id)
+    if data is None:
+        raise HTTPException(status_code=404, detail="No such recording")
+    return Response(as_markdown(data), media_type="text/markdown; charset=utf-8")
 
 
 @app.get("/meetings/{recording_id}/audio")
