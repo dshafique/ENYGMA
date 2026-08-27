@@ -68,15 +68,72 @@ def _ms(stamp: str | None) -> int | None:
     return ((int(hours or 0) * 3600) + int(minutes) * 60 + int(seconds)) * 1000
 
 
-def _json_from(text: str) -> dict:
+def _unfence(text: str) -> str:
     """Models fence JSON in markdown more often than not."""
-    cleaned = text.strip()
+    cleaned = (text or "").strip()
     if cleaned.startswith("```"):
         cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", cleaned, flags=re.S)
+    return cleaned.strip()
+
+
+def _json_from(text: str) -> dict:
+    cleaned = _unfence(text)
     start, end = cleaned.find("{"), cleaned.rfind("}")
     if start == -1 or end == -1:
         raise ValueError("The model did not return JSON")
     return json.loads(cleaned[start:end + 1])
+
+
+def _objects_in(text: str) -> list[dict]:
+    """Every complete {...} object in the text, in order.
+
+    A transcript arrives as one JSON document, and a document that is cut off --
+    by an output ceiling, or a dropped chunk -- fails to parse in its entirety.
+    An hour of correctly transcribed speech is then thrown away because of the
+    last four characters. This walks the text and keeps every object that closes,
+    so truncation costs the tail rather than the meeting.
+    """
+    out: list[dict] = []
+    stack: list[int] = []          # start index of every object still open
+    in_string = False
+    escaped = False
+    for i, ch in enumerate(text):
+        if in_string:
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == '"':
+                in_string = False
+            continue
+        if ch == '"':
+            in_string = True
+        elif ch == "{":
+            stack.append(i)
+        elif ch == "}" and stack:
+            start = stack.pop()
+            # Objects at every depth, not just the outermost: the segments live
+            # inside {"segments": [...]}, and it is the outer object that never
+            # closes when the response is cut off.
+            try:
+                out.append(json.loads(text[start:i + 1]))
+            except json.JSONDecodeError:
+                pass
+    return out
+
+
+def segments_from(raw: str) -> tuple[list[dict], bool]:
+    """(rows, salvaged). Strict parse first; recover what is there if it fails."""
+    cleaned = _unfence(raw)
+    try:
+        payload = json.loads(cleaned)
+        rows = payload.get("segments") if isinstance(payload, dict) else payload
+        if isinstance(rows, list):
+            return rows, False
+    except json.JSONDecodeError:
+        pass
+    rows = [o for o in _objects_in(cleaned) if "text" in o and "speaker" in o]
+    return rows, True
 
 
 class GeminiBackend(Backend):
@@ -102,9 +159,28 @@ class GeminiBackend(Backend):
             self._client = genai.Client(api_key=config.gemini_key())
         return self._client
 
-    def _ask(self, parts: list) -> str:
+    def _ask(self, parts: list, json_mode: bool = True) -> str:
+        """One call.
+
+        json_mode constrains decoding so the model cannot emit anything that is
+        not syntactically valid JSON. The output ceiling is raised because the
+        failure it prevents -- a transcript cut off mid-token -- is indistinguish-
+        able from the model simply being wrong.
+        """
         client = self._get_client()
-        interaction = client.interactions.create(model=self.model, input=parts)
+        request = {
+            "model": self.model,
+            "input": parts,
+            "generation_config": {"max_output_tokens": config.MAX_OUTPUT_TOKENS},
+        }
+        if json_mode:
+            request["response_mime_type"] = "application/json"
+        try:
+            interaction = client.interactions.create(**request)
+        except TypeError:
+            # An older or newer SDK may not accept every key. Losing the ceiling
+            # is worth far less than losing the call, so retry without the extras.
+            interaction = client.interactions.create(model=self.model, input=parts)
         return interaction.output_text
 
     def transcribe(self, audio_path, mime: str) -> Transcript:
@@ -125,7 +201,7 @@ class GeminiBackend(Backend):
             }
 
         raw = self._ask([{"type": "text", "text": TRANSCRIBE_PROMPT}, audio_part])
-        payload = _json_from(raw)
+        rows, salvaged = segments_from(raw)
         segments = [
             Segment(
                 speaker_label=(row.get("speaker") or "SPEAKER 1").strip().upper(),
@@ -133,16 +209,35 @@ class GeminiBackend(Backend):
                 end_ms=_ms(row.get("end")),
                 text=(row.get("text") or "").strip(),
             )
-            for row in payload.get("segments", [])
+            for row in rows
             if (row.get("text") or "").strip()
         ]
         if not segments:
-            raise RuntimeError("Gemini returned no transcript segments")
-        return Transcript(segments=segments, model=self.model)
+            raise RuntimeError(
+                "Gemini returned nothing that could be read as transcript segments. "
+                f"The response began: {raw[:180]!r}"
+            )
+        note = None
+        if salvaged:
+            last = segments[-1].end_ms
+            note = (f"The model's response was cut off. {len(segments)} segments were "
+                    f"recovered, up to {(last or 0) // 60000}:{((last or 0) // 1000) % 60:02d}. "
+                    "Re-run this meeting to try for the whole thing.")
+        return Transcript(segments=segments, model=self.model, note=note)
 
     def summarise(self, transcript: Transcript) -> Summary:
         raw = self._ask([{"type": "text", "text": SUMMARISE_PROMPT + transcript.as_text()}])
-        payload = _json_from(raw)
+        try:
+            payload = _json_from(raw)
+        except (ValueError, json.JSONDecodeError):
+            # Same exposure as the transcript: one long document, and a cut-off
+            # ending throws all of it away. Recover the pieces that closed.
+            found = _objects_in(_unfence(raw))
+            payload = next((o for o in found if "abstract" in o), None) or {}
+            if not payload:
+                payload = {
+                    "decisions": [o for o in found if "text" in o and "at" in o],
+                }
         pick = lambda rows: [
             {"text": r.get("text", "").strip(), "at_ms": _ms(r.get("at"))}
             for r in rows or [] if r.get("text")

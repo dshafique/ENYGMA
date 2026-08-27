@@ -99,8 +99,9 @@ def _write_results(recording_id: int, transcript, summary) -> None:
             last = transcript.segments[-1] if transcript.segments else None
             conn.execute(
                 "UPDATE recordings SET status = 'ready', transcribed_at = datetime('now'), "
-                "model = ?, duration_ms = COALESCE(duration_ms, ?) WHERE id = ?",
-                (transcript.model, (last.end_ms if last else None), recording_id),
+                "model = ?, duration_ms = COALESCE(duration_ms, ?), note = ? WHERE id = ?",
+                (transcript.model, (last.end_ms if last else None),
+                 getattr(transcript, "note", None), recording_id),
             )
             conn.execute("COMMIT")
         except Exception:

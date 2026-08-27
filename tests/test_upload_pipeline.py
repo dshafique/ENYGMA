@@ -165,3 +165,76 @@ def test_a_full_client_path_is_reduced_to_its_leaf():
     rec = upload.store(r"C:\Users\dawud\Desktop\Board meeting.mp3", io.BytesIO(MP3))
     assert rec["title"] == "Board meeting"
     assert repo.detail(rec["id"])["recording"]["original_filename"] == "Board meeting.mp3"
+
+
+# --------------------------------------------------------------- salvage
+def test_a_truncated_transcript_is_recovered_rather_than_thrown_away():
+    """The real failure: JSONDecodeError at char 7755. An hour of correctly
+    transcribed speech was discarded because of the last four characters."""
+    import json
+    from src.pipeline.gemini import segments_from
+
+    whole = json.dumps({"segments": [
+        {"speaker": f"SPEAKER {i % 3 + 1}", "start": "00:00", "end": "00:05",
+         "text": f"Segment number {i} of the meeting."} for i in range(170)]})
+
+    rows, salvaged = segments_from(whole)
+    assert len(rows) == 170 and salvaged is False
+
+    cut = whole[:7755]
+    try:
+        json.loads(cut)
+        raise AssertionError("that should not have parsed")
+    except json.JSONDecodeError:
+        pass
+    rows, salvaged = segments_from(cut)
+    assert salvaged is True
+    assert len(rows) == 73, "everything before the cut should survive"
+    assert all(r.get("text") for r in rows)
+
+
+def test_salvage_is_not_confused_by_braces_or_quotes_in_speech():
+    import json
+    from src.pipeline.gemini import segments_from
+    marker = '{"retain": true}'
+    payload = json.dumps({"segments": [{
+        "speaker": "SPEAKER 1", "start": "00:00", "end": "00:09",
+        "text": 'He wrote ' + marker + ' on the board and said "that is the fix".'}]})
+    rows, salvaged = segments_from(payload)
+    assert len(rows) == 1 and not salvaged
+    assert marker in rows[0]["text"]
+
+
+def test_a_refusal_or_prose_reply_is_not_mistaken_for_a_transcript():
+    from src.pipeline.gemini import segments_from
+    rows, _ = segments_from("I'm sorry, I can't help with that.")
+    assert rows == []
+
+
+def test_a_salvaged_transcript_tells_the_operator_it_is_incomplete():
+    """Silently incomplete is worse than failed. The recording still becomes
+    usable, and carries a note saying how far it got."""
+    import json
+    from src.pipeline.gemini import GeminiBackend
+
+    whole = json.dumps({"segments": [
+        {"speaker": "SPEAKER 1", "start": "00:00", "end": f"{i // 60:02d}:{i % 60:02d}",
+         "text": f"Line {i}."} for i in range(1, 90)]})
+
+    class Cut:
+        class files:
+            @staticmethod
+            def upload(file): raise AssertionError("inline expected")
+        class interactions:
+            @staticmethod
+            def create(**kw):
+                class R: output_text = whole[:3000]
+                return R()
+
+    import pathlib, tempfile
+    audio = pathlib.Path(tempfile.mkdtemp()) / "m.mp3"
+    audio.write_bytes(b"ID3" + b"\x01" * 256)
+    out = GeminiBackend(client=Cut()).transcribe(audio, "audio/mpeg")
+    assert 0 < len(out.segments) < 89
+    assert out.note and "cut off" in out.note
+    assert "Re-run" in out.note

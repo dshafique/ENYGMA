@@ -18,6 +18,9 @@ class Segment:
 class Transcript:
     segments: list[Segment] = field(default_factory=list)
     model: str = ""
+    # A non-fatal remark about how this transcript was obtained. Something the
+    # operator must be told but which does not make the result useless.
+    note: str | None = None
 
     @property
     def speaker_labels(self) -> list[str]:

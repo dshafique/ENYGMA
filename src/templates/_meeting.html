@@ -14,6 +14,15 @@
     <span class="pill {{ r.status }}"><i class="dot"></i>{{ r.status|upper }}</span>
   </div>
 
+  {% if r.note %}
+  <div class="banner warn" style="margin-top:var(--space-20)">
+    <span class="label">Incomplete</span>
+    <p>{{ r.note }}</p>
+    <button class="btn line sm" id="retry" data-id="{{ r.id }}"
+            style="margin-top:var(--space-12)">Run it again</button>
+  </div>
+  {% endif %}
+
   {% if r.status == 'failed' %}
   <div class="banner bad" style="margin-top:var(--space-20)">
     <span class="label">Failed</span>

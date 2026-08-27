@@ -1,0 +1,1670 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>ENYGMA: Operator's Manual | Volume I</title>
+<meta name="author" content="ENYGMA">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   ENYGMA // OPERATOR'S MANUAL
+   Print-and-screen styling, achromatic.
+
+   PHNTM's manual carries a brand colour and spends it on emphasis.
+   ENYGMA has no brand colour by design: hierarchy comes from value,
+   weight and elevation only. Where the Azul manual would go blue,
+   this one goes darker, heavier, or up a step of grey. The three
+   state colours -- danger, warning, ok -- are the only exception, and
+   they are information, not decoration.
+
+   Dark covers and dividers, full bleed. Light bodies, printer-friendly.
+   ============================================================ */
+
+:root {
+  /* Light: body pages. Measured, same values as the application. */
+  --bg:            #f4f4f6;
+  --paper:         #ffffff;
+  --surface-low:   #eeeef1;
+  --surface:       #e7e7ea;
+  --surface-high:  #dcdce1;
+  --ink:           #16161a;
+  --ink-mid:       #3d424a;
+  --ink-soft:      #525862;
+  --rule:          #cfcfd6;
+  --rule-soft:     #e0e0e5;
+  --rule-strong:   #9b9ba6;
+  --danger:        #c62026;
+  --warn:          #8a5300;
+  --ok:            #0f6b3a;
+
+  /* Dark: covers and part dividers. */
+  --d-bg:          #0d0d0f;
+  --d-surface:     #131316;
+  --d-surface-hi:  #2b2b31;
+  --d-rule:        #33333a;
+  --d-rule-strong: #4a4a53;
+  --d-text:        #e8e8ea;
+  --d-text-mid:    #9aa0a6;
+  --d-text-soft:   #80858d;
+  --d-accent:      #f2f2f4;
+
+  --prose: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --mono:  'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  font-family: var(--prose);
+  font-size: 10.5pt;
+  line-height: 1.6;
+  color: var(--ink);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+@page {
+  size: letter;
+  margin: 0.8in 0.9in 0.9in 0.9in;
+  @bottom-right {
+    content: counter(page);
+    font-family: var(--mono);
+    font-size: 8pt;
+    color: #525862;
+  }
+  @bottom-left {
+    content: 'ENYGMA // OPERATOR\'S MANUAL';
+    font-family: var(--mono);
+    font-size: 7.5pt;
+    letter-spacing: 0.14em;
+    color: #525862;
+  }
+}
+@page :first {
+  margin: 0;
+  @bottom-right { content: ''; }
+  @bottom-left  { content: ''; }
+}
+
+section.page { page-break-after: always; }
+section.no-break { page-break-inside: avoid; }
+
+/* ──────────── DARK PAGES ──────────── */
+.dark {
+  background: var(--d-bg);
+  color: var(--d-text);
+  page-break-after: always;
+  min-height: 100vh;
+  position: relative;
+  padding: 1.2in 1in;
+}
+/* The grid is the mark's own geometry, enlarged: 4 cells across a 64 unit box.
+   Achromatic, because a coloured overlay would be the one piece of brand
+   colour in a system that does not have one. */
+.dark::before {
+  content: '';
+  position: absolute; inset: 0;
+  background-image:
+    linear-gradient(rgba(255,255,255,0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.045) 1px, transparent 1px);
+  background-size: 0.4in 0.4in;
+  pointer-events: none;
+}
+.dark > * { position: relative; z-index: 1; }
+@media print {
+  .dark { -webkit-print-color-adjust: exact; print-color-adjust: exact; color-adjust: exact; }
+}
+
+/* ──────────── THE MARK ──────────── */
+/* 4x4 on a 64 unit box: cell 13, gap 3, offset 1.5, radius 1.6.
+   Voids at (0,0) (1,2) (2,1) (3,3). One spec, everywhere it appears. */
+.mark {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.231em;                      /* 3/13 of a cell */
+  width: 1em; height: 1em;
+  font-size: 48px;
+}
+.mark i { background: currentColor; border-radius: 0.123em; }
+.mark i.void { background: transparent; }
+.mark.sm { font-size: 15px; }
+
+/* ──────────── COVER ──────────── */
+.cover {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  min-height: 100vh;
+  padding: 1.1in 1in 1in;
+}
+.cover-top {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  font-family: var(--mono); font-size: 8pt;
+  letter-spacing: 0.2em; text-transform: uppercase; color: var(--d-text-soft);
+}
+.cover-top .crest { color: var(--d-accent); }
+.cover-mid { align-self: center; padding-top: 0.4in; }
+.cover-mid .vol {
+  font-family: var(--mono); font-size: 8.5pt; letter-spacing: 0.3em;
+  color: var(--d-text-soft); text-transform: uppercase; margin-bottom: 0.28in;
+}
+.cover-mid h1 {
+  font-family: var(--mono);
+  font-size: 68pt; font-weight: 700; line-height: 0.92;
+  letter-spacing: 0.1em; color: var(--d-accent);
+}
+.cover-mid h2 {
+  font-size: 17pt; font-weight: 400; color: var(--d-text-mid);
+  margin-top: 0.2in; letter-spacing: 0.01em;
+}
+.cover-mid .lede {
+  margin-top: 0.34in; max-width: 4.6in;
+  font-size: 10pt; line-height: 1.72; color: var(--d-text-mid);
+}
+.cover-rule { height: 1px; background: var(--d-rule); margin: 0.34in 0; }
+.cover-bot {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.3in;
+  font-family: var(--mono); font-size: 7.5pt;
+  letter-spacing: 0.16em; text-transform: uppercase; color: var(--d-text-soft);
+}
+.cover-bot strong {
+  display: block; margin-top: 0.07in;
+  font-size: 9.5pt; font-weight: 500; letter-spacing: 0.06em; color: var(--d-text);
+}
+
+/* ──────────── PART DIVIDERS ──────────── */
+.part-divider { display: grid; grid-template-rows: auto 1fr auto; }
+.part-divider .label {
+  font-family: var(--mono); font-size: 8pt; letter-spacing: 0.3em;
+  text-transform: uppercase; color: var(--d-text-soft);
+  display: flex; align-items: center; gap: 0.16in;
+}
+.part-divider .label::before {
+  content: ''; width: 0.5in; height: 1px; background: var(--d-rule-strong);
+}
+.part-divider h1 {
+  align-self: center;
+  font-size: 40pt; font-weight: 600; letter-spacing: -0.015em;
+  color: var(--d-accent); line-height: 1.05;
+}
+.part-divider .summary {
+  max-width: 4.4in; margin-top: 0.2in;
+  font-size: 10.5pt; line-height: 1.7; color: var(--d-text-mid);
+}
+.part-divider .toc-mini {
+  border-top: 1px solid var(--d-rule); padding-top: 0.2in;
+  font-family: var(--mono); font-size: 9pt; color: var(--d-text-mid);
+}
+.part-divider .toc-mini > div {
+  display: flex; gap: 0.24in; padding: 0.055in 0;
+}
+.part-divider .toc-mini .ch { color: var(--d-text-soft); min-width: 0.42in; }
+
+/* ──────────── BODY PAGES ──────────── */
+.body-page { padding: 0; }
+h1.chapter {
+  font-size: 23pt; font-weight: 600; letter-spacing: -0.015em;
+  line-height: 1.2; margin-bottom: 0.1in;
+}
+.chapter-meta {
+  display: flex; justify-content: space-between; align-items: baseline;
+  border-bottom: 1.5px solid var(--ink); padding-bottom: 0.07in;
+  margin-bottom: 0.26in;
+  font-family: var(--mono); font-size: 8pt;
+  letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-soft);
+}
+h2 {
+  font-size: 13pt; font-weight: 600; letter-spacing: -0.01em;
+  margin: 0.32in 0 0.11in; page-break-after: avoid;
+}
+h3 {
+  font-size: 10.5pt; font-weight: 600;
+  margin: 0.22in 0 0.08in; page-break-after: avoid;
+}
+p { margin-bottom: 0.13in; max-width: 6.1in; }
+p.lede { font-size: 11.5pt; line-height: 1.65; color: var(--ink-mid); }
+ul, ol { margin: 0.1in 0 0.16in 0.26in; max-width: 6.1in; }
+li { margin-bottom: 0.055in; }
+strong { font-weight: 600; }
+em { font-style: italic; color: var(--ink-mid); }
+a { color: var(--ink); text-decoration: underline; text-underline-offset: 2px; }
+
+.label {
+  font-family: var(--mono); font-size: 7.5pt; font-weight: 500;
+  letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink-soft);
+}
+
+/* ──────────── CODE ──────────── */
+pre, code { font-family: var(--mono); font-size: 8.6pt; line-height: 1.55; }
+code {
+  background: var(--surface); padding: 0.03rem 0.24rem;
+  border-radius: 2px; font-size: 8.4pt;
+}
+pre {
+  background: var(--surface-low);
+  border: 1px solid var(--rule);
+  border-left: 3px solid var(--ink);
+  padding: 0.16in 0.2in; margin: 0.14in 0;
+  white-space: pre-wrap; word-wrap: break-word;
+  page-break-inside: avoid; max-width: 6.4in;
+}
+pre code { background: transparent; padding: 0; }
+pre.term {
+  background: var(--d-bg); color: var(--d-text);
+  border-color: var(--d-rule); border-left-color: var(--d-rule-strong);
+  -webkit-print-color-adjust: exact; print-color-adjust: exact;
+}
+pre.term code { color: var(--d-text); }
+pre.term .prompt { color: var(--d-text-soft); }
+pre.term .out { color: var(--d-text-mid); }
+
+/* ──────────── CALLOUTS ──────────── */
+.callout {
+  border: 1px solid var(--rule);
+  border-left: 3px solid var(--rule-strong);
+  background: var(--paper);
+  padding: 0.14in 0.18in; margin: 0.16in 0;
+  font-size: 9.8pt; max-width: 6.1in; page-break-inside: avoid;
+}
+.callout .label { display: block; margin-bottom: 0.05in; }
+.callout.note { border-left-color: var(--ink); }
+.callout.note .label { color: var(--ink); }
+.callout.warn { border-left-color: var(--warn); background: #fdf8ef; }
+.callout.warn .label { color: var(--warn); }
+.callout.danger { border-left-color: var(--danger); background: #fdf3f3; }
+.callout.danger .label { color: var(--danger); }
+.callout.scar { border-left-color: var(--ink-soft); background: var(--surface-low); }
+.callout.scar .label { color: var(--ink-soft); }
+@media print { .callout { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+
+/* ──────────── TABLES ──────────── */
+table {
+  width: 100%; border-collapse: collapse; margin: 0.15in 0;
+  font-size: 8.8pt; page-break-inside: avoid;
+}
+th {
+  text-align: left; font-weight: 600;
+  background: var(--ink); color: var(--paper);
+  padding: 0.07in 0.11in;
+  font-family: var(--mono); font-size: 7.5pt;
+  letter-spacing: 0.1em; text-transform: uppercase;
+  -webkit-print-color-adjust: exact; print-color-adjust: exact;
+}
+td { padding: 0.07in 0.11in; border-bottom: 1px solid var(--rule-soft); vertical-align: top; }
+tr:nth-child(even) td {
+  background: var(--surface-low);
+  -webkit-print-color-adjust: exact; print-color-adjust: exact;
+}
+td code { font-size: 8pt; }
+
+/* ──────────── SPEC LISTS ──────────── */
+dl.specs {
+  display: grid; grid-template-columns: 1.5in 1fr;
+  gap: 0.06in 0.2in; margin: 0.16in 0; font-size: 9.5pt; max-width: 6.1in;
+}
+dl.specs dt {
+  font-family: var(--mono); font-size: 7.8pt; letter-spacing: 0.12em;
+  text-transform: uppercase; color: var(--ink-soft); padding-top: 0.022in;
+}
+dl.specs dd { border-bottom: 1px solid var(--rule-soft); padding-bottom: 0.06in; }
+
+/* ──────────── TOC ──────────── */
+.toc-page h1 { margin-bottom: 0.1in; }
+ol.toc-list { list-style: none; margin: 0.1in 0 0; }
+ol.toc-list > li.part {
+  font-family: var(--mono); font-size: 8.5pt;
+  letter-spacing: 0.18em; text-transform: uppercase; color: var(--ink-soft);
+  margin-top: 0.24in; padding-bottom: 0.05in; border-bottom: 1px solid var(--rule);
+}
+ol.toc-list > li.part:first-child { margin-top: 0; }
+ol.toc-list li.ch {
+  display: flex; gap: 0.2in; padding: 0.052in 0; font-size: 9.6pt;
+}
+ol.toc-list li.ch .num {
+  font-family: var(--mono); color: var(--ink-soft);
+  min-width: 0.52in; font-size: 8.6pt; padding-top: 0.012in;
+}
+
+.divider { height: 1px; background: var(--rule); margin: 0.28in 0; }
+.center { text-align: center; }
+.tenet-num {
+  font-family: var(--mono); font-size: 8pt; letter-spacing: 0.2em;
+  color: var(--ink-soft); text-transform: uppercase;
+}
+.status-dot {
+  display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+  margin-right: 0.5em; vertical-align: middle;
+  -webkit-print-color-adjust: exact; print-color-adjust: exact;
+}
+.d-ok { background: var(--ok); } .d-warn { background: var(--warn); }
+.d-bad { background: var(--danger); } .d-idle { background: var(--ink-soft); }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════ COVER ═══════════════════ -->
+<section class="dark cover">
+  <div class="cover-top">
+    <div class="crest">
+      <div class="mark sm">
+        <i class="void"></i><i></i><i></i><i></i>
+        <i></i><i></i><i class="void"></i><i></i>
+        <i></i><i class="void"></i><i></i><i></i>
+        <i></i><i></i><i></i><i class="void"></i>
+      </div>
+    </div>
+    <div>Classification: Operator eyes only</div>
+  </div>
+
+  <div class="cover-mid">
+    <div class="vol">Volume I</div>
+    <h1>ENYGMA</h1>
+    <h2>Operator's Manual</h2>
+    <p class="lede">
+      A complete reference for building, deploying and operating ENYGMA:
+      a private meeting-intelligence system for a single operator, running on
+      hardware they own. Covers the host, the pipeline, authentication,
+      recovery and daily use, with the reasoning behind every decision that
+      would otherwise look arbitrary.
+    </p>
+  </div>
+
+  <div>
+    <div class="cover-rule"></div>
+    <div class="cover-bot">
+      <div>Author<strong>ARKHM</strong></div>
+      <div>Operator<strong>Yahya</strong></div>
+      <div>Edition<strong>Mk II.5</strong></div>
+      <div>Date<strong>2026-08-27</strong></div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════ COLOPHON ═══════════════════ -->
+<section class="page body-page">
+  <h1 class="chapter">Colophon</h1>
+  <div class="chapter-meta">
+    <span class="label">Front matter</span>
+    <span>Mk II.5 / 2026-08-27</span>
+  </div>
+
+  <p class="lede">
+    This manual documents <strong>ENYGMA</strong>: a meeting-intelligence system
+    built for one person, on one machine, with no account to sign up for and no
+    company between the operator and their own recordings. It is written for a
+    technically-literate operator with shell access to the host.
+  </p>
+
+  <p>
+    Every value, command and design decision here is documented with the reason
+    it was made, so that the system can be rebuilt from a clean machine by
+    someone with no access to a language model and no memory of the original
+    build.
+  </p>
+
+  <h2>Edition</h2>
+  <dl class="specs">
+    <dt>Author</dt><dd>ARKHM</dd>
+    <dt>Volume</dt><dd>I, Operation</dd>
+    <dt>Edition</dt><dd>Mk II.5 | 2026-08-27</dd>
+    <dt>Host</dt><dd><code>spark-4d80</code>, Ubuntu, Python 3.12</dd>
+    <dt>Address</dt><dd><code>https://enygma.arkhm.io</code></dd>
+    <dt>Repository</dt><dd><code>github.com/dshafique/ENYGMA</code></dd>
+    <dt>Manual source</dt><dd><code>docs/manual/ENYGMA-OPERATORS-MANUAL.html</code></dd>
+  </dl>
+
+  <h2>Scope of this edition</h2>
+  <p>
+    This edition is the operator's reference for the running system. It covers
+    everything needed to rebuild it, everything needed to run it day to day, and
+    the failure modes that have actually occurred rather than the ones that
+    theoretically might.
+  </p>
+
+  <p><strong>What this edition documents in full:</strong></p>
+  <ul>
+    <li><strong>Foreword</strong> | what ENYGMA is, the five tenets, how to read this.</li>
+    <li><strong>Concept</strong> | the product surface, the architecture, the pipeline end to end.</li>
+    <li><strong>Bill of Materials</strong> | host, software, accounts, network, cost.</li>
+    <li><strong>Build</strong> | deployment, configuration, first run, verification.</li>
+    <li><strong>Access &amp; Auth</strong> | Cloudflare Tunnel, passkeys, setup codes, PIN, recovery, PWA.</li>
+    <li><strong>Operating</strong> | daily use, backups and restore, failure modes, releases.</li>
+  </ul>
+
+  <p><strong>What this edition does not cover:</strong></p>
+  <ul>
+    <li>PHNTM. The two systems share a machine and nothing else. Where this
+      manual mentions PHNTM it is only to describe what must not be disturbed.</li>
+    <li>The HiNotes recorder integration, which exists in the source but is gated
+      off. Audio arrives by drag and drop.</li>
+    <li>Verification of transcript accuracy against a known-good reference. That
+      work is outstanding and is named as such in Chapter 18.</li>
+  </ul>
+
+  <h2>Conventions used in this manual</h2>
+  <table>
+    <tr><th>Convention</th><th>Meaning</th></tr>
+    <tr><td><code>monospace</code></td><td>A literal: a command, a path, a file name, an environment variable, a value to type exactly.</td></tr>
+    <tr><td>Dark terminal block</td><td>A command to run, with its real output. Output shown is output actually observed, not illustrative.</td></tr>
+    <tr><td>Light code block</td><td>File contents, or code quoted from the source tree.</td></tr>
+    <tr><td><strong>Note</strong></td><td>Something that will save time or prevent confusion.</td></tr>
+    <tr><td><strong>Warning</strong></td><td>Something that can lose data, break access, or disturb PHNTM.</td></tr>
+    <tr><td><strong>Scar</strong></td><td>A decision that looks strange until you know the bug behind it. These are the most useful paragraphs in the manual.</td></tr>
+  </table>
+
+  <div class="callout note">
+    <span class="label">Note</span>
+    Commands and outputs in this manual were run against the working system at
+    the edition's date. Where the manual and the source tree disagree, the source
+    is canonical and the manual should be re-issued.
+  </div>
+
+  <h2>Versioning</h2>
+  <p>
+    The manual's edition number is the application's mark: <strong>Mk II.N</strong>,
+    where N is the commit count of the repository the build came from. A manual
+    marked Mk II.5 describes the system as it stood at commit 5. The application
+    reports its own mark in the top right of every screen and at
+    <code>/healthz</code>, so a manual and a running system can always be
+    checked against each other in one glance.
+  </p>
+</section>
+
+<!-- ═══════════════════ TABLE OF CONTENTS ═══════════════════ -->
+<section class="page body-page toc-page">
+  <h1 class="chapter">Table of Contents</h1>
+  <div class="chapter-meta">
+    <span class="label">Front matter</span>
+    <span>Mk II.5 / 2026-08-27</span>
+  </div>
+
+  <ol class="toc-list">
+    <li class="part">Part 0 &nbsp;|&nbsp; Foreword</li>
+    <li class="ch"><span class="num">0.1</span><span>What ENYGMA is</span></li>
+    <li class="ch"><span class="num">0.2</span><span>The Five Tenets</span></li>
+    <li class="ch"><span class="num">0.3</span><span>How to read this manual</span></li>
+
+    <li class="part">Part 1 &nbsp;|&nbsp; Concept</li>
+    <li class="ch"><span class="num">1</span><span>The product surface</span></li>
+    <li class="ch"><span class="num">2</span><span>Architecture overview</span></li>
+    <li class="ch"><span class="num">3</span><span>Data flow, end to end</span></li>
+
+    <li class="part">Part 2 &nbsp;|&nbsp; Bill of Materials</li>
+    <li class="ch"><span class="num">4</span><span>The host</span></li>
+    <li class="ch"><span class="num">5</span><span>Software stack</span></li>
+    <li class="ch"><span class="num">6</span><span>Accounts, network topology and cost</span></li>
+
+    <li class="part">Part 3 &nbsp;|&nbsp; Build</li>
+    <li class="ch"><span class="num">7</span><span>Deployment</span></li>
+    <li class="ch"><span class="num">8</span><span>Configuration</span></li>
+    <li class="ch"><span class="num">9</span><span>First run and verification</span></li>
+
+    <li class="part">Part 4 &nbsp;|&nbsp; Access &amp; Auth</li>
+    <li class="ch"><span class="num">10</span><span>Cloudflare Tunnel and DNS</span></li>
+    <li class="ch"><span class="num">11</span><span>Passkeys and the freshness window</span></li>
+    <li class="ch"><span class="num">12</span><span>Setup codes, PIN and adding a device</span></li>
+    <li class="ch"><span class="num">13</span><span>Recovery procedures and threat model</span></li>
+    <li class="ch"><span class="num">14</span><span>Installing as an app</span></li>
+
+    <li class="part">Part 5 &nbsp;|&nbsp; Operating</li>
+    <li class="ch"><span class="num">15</span><span>Daily use</span></li>
+    <li class="ch"><span class="num">16</span><span>Backups and restore</span></li>
+    <li class="ch"><span class="num">17</span><span>Failure modes</span></li>
+    <li class="ch"><span class="num">18</span><span>Releases, and what is still unproven</span></li>
+
+    <li class="part">Appendices</li>
+    <li class="ch"><span class="num">A</span><span>Environment variables</span></li>
+    <li class="ch"><span class="num">B</span><span>HTTP surface</span></li>
+    <li class="ch"><span class="num">C</span><span>Source tree map</span></li>
+    <li class="ch"><span class="num">D</span><span>The scar list</span></li>
+  </ol>
+</section>
+
+<!-- ═══════════════════ PART 0 ═══════════════════ -->
+<section class="dark part-divider">
+  <div class="label">Part Zero</div>
+  <div>
+    <h1>Foreword</h1>
+    <p class="summary">
+      What ENYGMA is, the five commitments it is built on, and how to read
+      the rest of this.
+    </p>
+  </div>
+  <div class="toc-mini">
+    <div><span class="ch">0.1</span><span>What ENYGMA is</span></div>
+    <div><span class="ch">0.2</span><span>The Five Tenets</span></div>
+    <div><span class="ch">0.3</span><span>How to read this manual</span></div>
+  </div>
+</section>
+
+<section class="page body-page">
+  <h1 class="chapter">0.1 &nbsp;|&nbsp; What ENYGMA is</h1>
+  <div class="chapter-meta"><span class="label">Part 0 · Foreword</span><span>0.1</span></div>
+
+  <p class="lede">
+    ENYGMA turns a recording of a meeting into something you can act on: an
+    attributed transcript, a summary where every claim points back at the moment
+    it was said, and a list of what anybody committed to do.
+  </p>
+
+  <h2>The problem it solves</h2>
+  <p>
+    An intern sits in meetings where decisions are made quickly, by people who
+    already share years of context, using words nobody stops to define. Two hours
+    later he has three pages of notes, no idea which parts mattered, and a
+    handful of terms he did not want to interrupt to ask about.
+  </p>
+  <p>
+    Recording the meeting does not fix this. A ninety-minute audio file is worse
+    than notes: it contains everything and surfaces nothing. What is needed is the
+    same recording, indexed by speaker and by moment, with the decisions pulled
+    out and every one of them still attached to the audio that proves it.
+  </p>
+
+  <h2>What makes it different from a transcription service</h2>
+  <p>
+    Three things, all of which follow from who it is for.
+  </p>
+  <p>
+    <strong>It runs on hardware its operator owns.</strong> There is no account,
+    no dashboard belonging to somebody else, and no company that can change its
+    terms, raise its price, or read the recordings. The only third party that
+    ever sees the audio is the transcription model, and that relationship is one
+    API key that the operator holds and can revoke.
+  </p>
+  <p>
+    <strong>Every claim is checkable.</strong> A summary that asserts a decision
+    without pointing at the moment it was made is an assertion the operator cannot
+    verify. Every decision, open question and action in ENYGMA carries a timestamp
+    that seeks the audio. If a claim cannot point at a moment, it is left out.
+  </p>
+  <p>
+    <strong>It teaches.</strong> Hold any word in a transcript and ENYGMA
+    explains it; ask for more and the term opens a conversation. The system is
+    built on the assumption that its operator is learning, and that the words he
+    did not want to interrupt to ask about are the highest-value thing in the
+    recording.
+  </p>
+
+  <h2>What it is not</h2>
+  <ul>
+    <li><strong>Not multi-tenant</strong>, and deliberately not built so that it
+      could become multi-tenant later. One operator, one database, one unix user.
+      Every place where a second user would need to be accommodated is a place
+      where a simpler decision was made instead.</li>
+    <li><strong>Not a note-taking app.</strong> It does not compete with the
+      operator's own notes; it indexes the recording those notes were taken from.</li>
+    <li><strong>Not a system of record for anyone else.</strong> Nothing
+      synchronises outward. A meeting can be copied out as Markdown on demand,
+      which is a one-directional escape hatch, not an integration.</li>
+    <li><strong>Not a source of truth about people.</strong> Speaker names are
+      assigned by the operator, by hand, and the model never guesses one. Two
+      similar names are two people until the operator says otherwise.</li>
+  </ul>
+
+  <div class="callout note">
+    <span class="label">Note</span>
+    ENYGMA shares a machine with PHNTM and shares nothing else: not a database,
+    not a session secret, not an API key, not a unix user. The isolation is
+    enforced by file permissions, and Chapter 4 shows the proof rather than
+    asserting it.
+  </div>
+</section>
+
+<section class="page body-page">
+  <h1 class="chapter">0.2 &nbsp;|&nbsp; The Five Tenets</h1>
+  <div class="chapter-meta"><span class="label">Part 0 · Foreword</span><span>0.2</span></div>
+
+  <p class="lede">
+    Five commitments. Every design decision in this system can be traced to one
+    of them, and where two of them conflict the earlier one wins.
+  </p>
+
+  <div class="divider"></div>
+
+  <div class="tenet-num">Tenet 01</div>
+  <h2>No password exists in this product</h2>
+  <p>
+    Authentication is a passkey: a private key held by the device's secure
+    hardware, released by a fingerprint. There is nothing to phish, nothing to
+    reuse from another site, and nothing a database breach could reveal, because
+    the server stores only public keys.
+  </p>
+  <p>
+    A PIN and recovery codes exist as the way back in when the passkey is
+    unavailable. They are hashed with Argon2id, never a fast hash, and they sit
+    behind a single lockout counter shared by every method — five failures
+    across passkey and PIN combined, not five each.
+  </p>
+
+  <div class="divider"></div>
+
+  <div class="tenet-num">Tenet 02</div>
+  <h2>Isolation is filesystem permissions, not discipline</h2>
+  <p>
+    ENYGMA runs as its own unix user, with its own home directory at mode 750 and
+    its data and audio directories at 700. The isolation from PHNTM is not a
+    convention that a future change might forget; it is a property the kernel
+    enforces on every read.
+  </p>
+  <p>
+    The session cookie is named with the <code>__Host-</code> prefix, which
+    forbids a <code>Domain</code> attribute. The cookie therefore <em>cannot</em>
+    be scoped to <code>arkhm.io</code> — not by policy, but by construction.
+  </p>
+
+  <div class="divider"></div>
+
+  <div class="tenet-num">Tenet 03</div>
+  <h2>Migrations are forever-additive</h2>
+  <p>
+    Never drop a column, never rename one. To remove a column, stop writing to
+    it. A migration that only ever adds is a migration that can be applied to any
+    older database, which means a backup from any point in the system's life can
+    still be restored and brought forward.
+  </p>
+
+  <div class="divider"></div>
+
+  <div class="tenet-num">Tenet 04</div>
+  <h2>Every claim carries the moment it came from</h2>
+  <p>
+    A summary is a set of assertions about what happened. An assertion the
+    operator cannot check is worse than no assertion, because it is trusted.
+  </p>
+  <p>
+    Every decision, open question and action in ENYGMA is stored with the
+    millisecond offset it came from, rendered as a timestamp the operator can
+    click to hear it. The prompt sent to the model says explicitly: if you cannot
+    point at a moment, leave the item out. This survives the copy-out too — a
+    meeting exported as Markdown carries its timestamps with it, because pasting
+    a summary somewhere else is exactly where an unsourced claim does damage.
+  </p>
+
+  <div class="divider"></div>
+
+  <div class="tenet-num">Tenet 05</div>
+  <h2>Empty beats invented</h2>
+  <p>
+    Where the system has no real answer it says so and shows nothing. Home has a
+    panel for headlines in the operator's field; no feed is connected, so it says
+    that plainly rather than displaying something plausible. Chat, with no model
+    reachable, returns what the glossary actually knows and states that it cannot
+    go further. The transcription prompt is told to write <code>[inaudible]</code>
+    rather than invent words.
+  </p>
+  <p>
+    A blank panel is a small failure. A confidently wrong one is a large failure
+    that looks like a success, and the operator has no way to tell them apart.
+  </p>
+</section>
+
+<section class="page body-page">
+  <h1 class="chapter">0.3 &nbsp;|&nbsp; How to read this manual</h1>
+  <div class="chapter-meta"><span class="label">Part 0 · Foreword</span><span>0.3</span></div>
+
+  <h2>The two reading orders</h2>
+
+  <h3>Reader A, the operator</h3>
+  <p>
+    You want to use the system that is already running. Read Chapter 1 for what
+    the five tabs are, Chapter 15 for daily use, and Chapter 12 for how to get it
+    onto a second device. Keep Chapter 17 nearby: it is the list of things that
+    can go wrong and what each one means. Everything else can wait until it
+    breaks.
+  </p>
+
+  <h3>Reader B, the builder</h3>
+  <p>
+    You are rebuilding this from a clean machine, or you are the person who
+    inherits it. Read straight through. Parts 2 and 3 are the build; Part 4 is
+    the half that is easy to get subtly wrong and hard to debug afterwards.
+    Appendix D — the scar list — will save you the most time of anything here.
+  </p>
+
+  <h2>What you need to know going in</h2>
+  <ul>
+    <li>A shell, <code>ssh</code>, and enough comfort with a Linux host to read
+      <code>journalctl</code> output without panic.</li>
+    <li>Nothing about Python. You will run scripts, not write them.</li>
+    <li>Nothing about the browser. The interface explains itself.</li>
+  </ul>
+
+  <h2>If something here is wrong</h2>
+  <p>
+    The source tree is canonical. If a command in this manual fails and the
+    source disagrees with the manual, the source is right and this document is
+    stale — re-issue it at the next edition rather than working around it. The
+    manual's edition is the commit it was written against, so the disagreement
+    can always be located precisely.
+  </p>
+
+  <div class="callout scar">
+    <span class="label">Scar</span>
+    An earlier deployment of this system re-installed a stale copy of itself and
+    reported complete success: correct output, all tests passing, healthy service.
+    It was three days behind. Every version number in this manual, and the mark in
+    the corner of every screen, exists because of that afternoon.
+  </div>
+</section>
+
+<!-- ═══════════════════ PART 1 ═══════════════════ -->
+<section class="dark part-divider">
+  <div class="label">Part One</div>
+  <div>
+    <h1>Concept</h1>
+    <p class="summary">
+      What the operator sees, what runs underneath it, and the path a recording
+      takes from a dropped file to a checkable summary.
+    </p>
+  </div>
+  <div class="toc-mini">
+    <div><span class="ch">01</span><span>The product surface</span></div>
+    <div><span class="ch">02</span><span>Architecture overview</span></div>
+    <div><span class="ch">03</span><span>Data flow, end to end</span></div>
+  </div>
+</section>
+
+<section class="page body-page">
+  <h1 class="chapter">Chapter 1 &nbsp;|&nbsp; The product surface</h1>
+  <div class="chapter-meta"><span class="label">Part 1 · Concept</span><span>01</span></div>
+
+  <p class="lede">
+    Five destinations, one shell. A nav rail on a desktop, a tab bar on a
+    handset, and the same five places either way.
+  </p>
+
+  <table>
+    <tr><th>Tab</th><th>Answers</th><th>Holds</th></tr>
+    <tr><td><strong>Home</strong></td><td>What should I look at now?</td>
+        <td>Recent meetings, open actions, headlines, what ENYGMA has learned, counts. Every panel is a door into another tab.</td></tr>
+    <tr><td><strong>Meetings</strong></td><td>What happened in this one?</td>
+        <td>The list and the reader: search, status filters, day groups; then speakers, summary, transcript, actions and the audio.</td></tr>
+    <tr><td><strong>Chat</strong></td><td>What does this mean?</td>
+        <td>Threads. A thread can start empty or from a word held down in a transcript, in which case the term arrives as the first question.</td></tr>
+    <tr><td><strong>Action items</strong></td><td>What do I owe anybody?</td>
+        <td>Every commitment across every meeting, open and done, each linking back to the moment it was said.</td></tr>
+    <tr><td><strong>Directory</strong></td><td>Who is this person?</td>
+        <td>Everyone who has spoken, and the meetings they appeared in. A person exists because a speaker label was given a name.</td></tr>
+  </table>
+
+  <p>
+    Settings is not a tab. It sits at the foot of the rail on a desktop and in
+    the header row on a handset, because it is a place you visit rarely and
+    deliberately.
+  </p>
+
+  <h2>What it accepts</h2>
+  <p>
+    Audio, dropped onto the Meetings tab: <code>mp3</code>, <code>wav</code>,
+    <code>m4a</code>, <code>aac</code>, <code>ogg</code>, <code>flac</code>,
+    <code>aiff</code>. Up to 500&nbsp;MB each by default. Files are content
+    addressed by SHA-256, so the same recording dropped twice is one meeting
+    whatever it was called the second time. That is the only deduplication rule:
+    exact, never fuzzy, never guessing that two files are "probably" the same.
+  </p>
+
+  <h2>What it produces</h2>
+
+  <h3>1. The attributed transcript</h3>
+  <p>
+    Every segment carries a speaker label, a start and an end. Labels begin as
+    <code>SPEAKER 1</code>, <code>SPEAKER 2</code> and are given real names by
+    the operator, by hand. The model is instructed never to guess a name even if
+    one is said aloud, because a name in a transcript is evidence and a guessed
+    name is a fabrication that looks like evidence.
+  </p>
+
+  <h3>2. The checkable summary</h3>
+  <p>
+    An abstract of two or three sentences, then decisions, open questions and
+    actions — each one carrying the timestamp it came from. Clicking a timestamp
+    seeks the audio to that moment.
+  </p>
+
+  <h3>3. The glossary and the conversation</h3>
+  <p>
+    Holding a word in the transcript raises a small panel with a definition and
+    a <em>Learn more</em> that opens a Chat thread named for that term, with the
+    question already asked and answered. The glossary ships with the vocabulary
+    of the operator's field and grows by use.
+  </p>
+
+  <h3>4. A copy, on demand</h3>
+  <p>
+    <em>Copy as Markdown</em> puts the whole meeting on the clipboard: title,
+    date, who was present, abstract, decisions and questions with their
+    timestamps, actions as checkboxes with owners resolved to real names, and a
+    closing line stating which model produced it and that speaker names are not
+    model-verified. One direction, on demand, nothing stored.
+  </p>
+</section>
+
+<section class="page body-page">
+  <h1 class="chapter">Chapter 2 &nbsp;|&nbsp; Architecture overview</h1>
+  <div class="chapter-meta"><span class="label">Part 1 · Concept</span><span>02</span></div>
+
+  <h2>Component map</h2>
+  <pre><code>          browser  (desktop rail / handset tab bar / installed PWA)
+             │  https, passkey session, __Host- cookie
+             ▼
+    Cloudflare edge ──── tunnel ────┐
+             │                      │
+             ▼                      ▼
+    enygma.arkhm.io          arkhm.io, www  (PHNTM, untouched)
+             │
+             ▼
+    cloudflared ──▶ 127.0.0.1:4073
+                         │
+                    ┌────┴─────────────────────────┐
+                    │  uvicorn / FastAPI           │   user: enygma
+                    │    routes, templates, static │   MemoryMax 8G
+                    │                              │
+                    │  worker thread               │
+                    │    queued ▶ transcribing     │
+                    │           ▶ ready | failed   │
+                    └────┬─────────────────┬───────┘
+                         │                 │
+                  data/enygma.db      uploads/&lt;sha&gt;.m4a
+                   SQLite, WAL          mode 700
+                     mode 700
+                         │
+                         ▼
+                  backups/*.db.gz   nightly, verified</code></pre>
+
+  <h2>Process model</h2>
+  <p>
+    One process. Uvicorn serves the HTTP surface on the main thread; a single
+    background thread runs the transcription worker, one recording at a time.
+    There is no queue broker, no second service and no scheduler, because one
+    operator dropping a few files a week does not have a queueing problem, and
+    machinery that is not there cannot fail at three in the morning.
+  </p>
+
+  <h2>Why FastAPI</h2>
+  <p>
+    Server-rendered Jinja templates, no front-end framework, no build step. The
+    entire client is one CSS file and one JavaScript module, both served
+    directly. A deploy is copying files and restarting a service. There is no
+    <code>node_modules</code> anywhere in the runtime path, which means there is
+    no supply chain in the runtime path either.
+  </p>
+
+  <h2>Why SQLite</h2>
+  <p>
+    One operator, one machine, single-digit gigabytes. SQLite in WAL mode handles
+    this with room to spare, and it makes the backup story trivial: the entire
+    system's memory is one file that can be copied, verified and restored in
+    seconds. A database server would add a second thing to secure, a second thing
+    to back up, and a second thing to be running before the app can start.
+  </p>
+
+  <div class="callout note">
+    <span class="label">Note</span>
+    WAL mode is why backups are taken through SQLite's own backup API rather than
+    <code>cp</code>. A file copy taken mid-write is a torn database that looks
+    fine until the day you need it. See Chapter 16.
+  </div>
+</section>
+
+<section class="page body-page">
+  <h1 class="chapter">Chapter 3 &nbsp;|&nbsp; Data flow, end to end</h1>
+  <div class="chapter-meta"><span class="label">Part 1 · Concept</span><span>03</span></div>
+
+  <p class="lede">
+    Nine stages from a dropped file to a summary on screen. Every stage either
+    advances the recording's status or fails it with a sentence.
+  </p>
+
+  <h2>The pipeline</h2>
+  <ol>
+    <li><strong>Drop.</strong> The browser posts the file to <code>/upload</code>.
+      A stale session is refused here with <code>reason: stale</code>, which
+      raises the re-auth sheet rather than failing silently.</li>
+    <li><strong>Validate before writing a byte.</strong> Extension must be a known
+      audio type; size must be under the ceiling. Rejection is a sentence saying
+      which rule was broken.</li>
+    <li><strong>Stream and hash together.</strong> The file is written to a
+      temporary name while SHA-256 is computed over the same pass, so a 400&nbsp;MB
+      file is read once, not twice.</li>
+    <li><strong>Deduplicate.</strong> If that hash already exists, the temporary
+      file is discarded and the existing recording is returned, marked as a
+      duplicate. Nothing is overwritten.</li>
+    <li><strong>Commit.</strong> The file is renamed to
+      <code>uploads/&lt;first-16-of-hash&gt;.&lt;ext&gt;</code> and a row is
+      inserted with status <code>queued</code>. The path is stored POSIX-style
+      regardless of the client's platform.</li>
+    <li><strong>Claim.</strong> The worker takes one queued recording inside a
+      <code>BEGIN IMMEDIATE</code> transaction and marks it
+      <code>transcribing</code>, so two claims can never race.</li>
+    <li><strong>Transcribe.</strong> Under 20&nbsp;MB the audio goes inline as
+      base64; above that it is uploaded via the Files API and referenced by URI.
+      The model returns JSON segments with speaker, start, end and text.</li>
+    <li><strong>Summarise.</strong> The transcript is rendered to timestamped
+      text and sent back for an abstract, decisions, questions and actions —
+      each with the moment it came from.</li>
+    <li><strong>Write results atomically.</strong> Segments, speakers, summary
+      and actions are written in one transaction, and the recording flips to
+      <code>ready</code>. Completed actions are preserved across a re-run; only
+      open ones are replaced.</li>
+  </ol>
+
+  <h2>Status states, complete list</h2>
+  <table>
+    <tr><th>State</th><th>Means</th><th>What moves it on</th></tr>
+    <tr><td><span class="status-dot d-idle"></span><code>queued</code></td>
+        <td>Stored on disk, waiting for the worker.</td>
+        <td>The worker, within the poll interval — three seconds by default.</td></tr>
+    <tr><td><span class="status-dot d-warn"></span><code>transcribing</code></td>
+        <td>Claimed. The model is working.</td>
+        <td>Success, or an exception that fails it with a reason.</td></tr>
+    <tr><td><span class="status-dot d-ok"></span><code>ready</code></td>
+        <td>Transcript, summary and actions are written.</td>
+        <td>Nothing. This is the resting state.</td></tr>
+    <tr><td><span class="status-dot d-bad"></span><code>failed</code></td>
+        <td>Something threw. The reason is stored and shown verbatim.</td>
+        <td><em>Try again</em> on the meeting, which requeues it without re-uploading.</td></tr>
+  </table>
+
+  <div class="callout scar">
+    <span class="label">Scar</span>
+    A recording is marked <code>transcribing</code> <em>before</em> the work
+    starts. If the process dies in that gap — a restart, the memory ceiling, a
+    power cut — nothing would ever pick it up again, because the worker only
+    claims <code>queued</code>. The operator would watch a progress bar that
+    could never finish. <code>requeue_stuck()</code> runs at startup and puts
+    them back, with a note saying so.
+  </div>
+
+  <h2>The stub backend</h2>
+  <p>
+    With <code>ENYGMA_PIPELINE=stub</code> the entire application runs with no
+    API key and no network, producing deterministic placeholder transcripts. This
+    is not a toy: it is how the interface was built before the bill started, it
+    is what the test suite runs against so the tests never depend on a third
+    party being up, and it is the safe default in a fresh <code>.env</code>.
+  </p>
+  <p>
+    The interface never lets the stub be mistaken for the real thing. An amber
+    banner sits above the dropzone, and Settings reports the pipeline as
+    <code>STUB</code>.
+  </p>
+</section>
+
+<!-- ═══════════════════ PART 2 ═══════════════════ -->
+<section class="dark part-divider">
+  <div class="label">Part Two</div>
+  <div>
+    <h1>Bill of Materials</h1>
+    <p class="summary">
+      The machine, the software on it, the accounts it depends on, and what the
+      whole thing costs to run.
+    </p>
+  </div>
+  <div class="toc-mini">
+    <div><span class="ch">04</span><span>The host</span></div>
+    <div><span class="ch">05</span><span>Software stack</span></div>
+    <div><span class="ch">06</span><span>Accounts, network topology and cost</span></div>
+  </div>
+</section>
+
+<section class="page body-page">
+  <h1 class="chapter">Chapter 4 &nbsp;|&nbsp; The host</h1>
+  <div class="chapter-meta"><span class="label">Part 2 · Bill of Materials</span><span>04</span></div>
+
+  <h2>Reference specification</h2>
+  <dl class="specs">
+    <dt>Hostname</dt><dd><code>spark-4d80</code></dd>
+    <dt>OS</dt><dd>Ubuntu, systemd</dd>
+    <dt>Python</dt><dd>3.12 (3.10 is the floor; the installer refuses below it)</dd>
+    <dt>Disk</dt><dd>3.7&nbsp;TB NVMe, shared with PHNTM</dd>
+    <dt>Memory ceiling</dt><dd>8&nbsp;GB, enforced by systemd <code>MemoryMax</code></dd>
+    <dt>Port</dt><dd><code>4073</code>, loopback only. PHNTM holds 4063.</dd>
+    <dt>Unix user</dt><dd><code>enygma</code>, home <code>/home/enygma</code>, app in <code>app/</code></dd>
+  </dl>
+
+  <h2>Why a memory ceiling</h2>
+  <p>
+    The machine is shared. A leak or a runaway on ENYGMA's side must not be able
+    to pressure PHNTM out of memory. <code>MemoryMax=8G</code> means the kernel
+    kills ENYGMA rather than letting it take the machine down with it, and
+    <code>Restart=on-failure</code> brings it back. The interrupted-recording
+    recovery in Chapter 3 exists precisely so that this is survivable.
+  </p>
+
+  <h2>Isolation, proved rather than asserted</h2>
+  <p>
+    The installer sets the home directory to 750 and the data and upload
+    directories to 700, then verifies it by attempting the read as another
+    account. The relevant part of the install output:
+  </p>
+  <pre class="term"><code><span class="prompt">$</span> sudo bash deploy/install-on-spark.sh
+<span class="out">==&gt; checks
+    healthz: {"ok":true,"app":"enygma","port":4073,"version":"5.2026.08.27.0526"}
+    no other account can read the database, the audio or the secret</span></code></pre>
+
+  <div class="callout scar">
+    <span class="label">Scar</span>
+    <code>adduser</code> creates home directories world-readable on most
+    distributions. The first version of the installer used it and stopped there,
+    which meant the <code>arkhm</code> account could read every one of Yahya's
+    recordings and his database. This was found by running the installer as root
+    in a scratch container and actually trying the read. The <code>chmod</code>
+    lines and the proof loop both date from that.
+  </div>
+
+  <h2>Disk</h2>
+  <p>
+    Audio costs roughly 75&nbsp;MB per hour of meeting. The alarm is set at
+    200&nbsp;GB, which is about 2,600 hours. Quotas were preferred but are not
+    enabled on this filesystem, so an hourly alarm is installed instead —
+    <code>/etc/cron.hourly/enygma-disk</code>, reporting to
+    <code>journalctl -t enygma-disk</code>.
+  </p>
+  <div class="callout warn">
+    <span class="label">Warning</span>
+    An alarm reports; it does not stop the write. SQLite behaves badly on a full
+    disk, and the disk is shared with PHNTM. If the alarm fires, act on it.
+  </div>
+</section>
+
+<section class="page body-page">
+  <h1 class="chapter">Chapter 5 &nbsp;|&nbsp; Software stack</h1>
+  <div class="chapter-meta"><span class="label">Part 2 · Bill of Materials</span><span>05</span></div>
+
+  <h2>Python dependencies</h2>
+  <table>
+    <tr><th>Package</th><th>Pinned</th><th>Why this one</th></tr>
+    <tr><td><code>fastapi</code></td><td>0.115.6</td><td>Routing, dependency injection, and typed request handling without a framework's worth of ceremony.</td></tr>
+    <tr><td><code>uvicorn[standard]</code></td><td>0.34.0</td><td>The ASGI server. <code>standard</code> brings the C-accelerated event loop and HTTP parser.</td></tr>
+    <tr><td><code>jinja2</code></td><td>3.1.5</td><td>Server-rendered templates. No build step, no hydration, no framework.</td></tr>
+    <tr><td><code>python-multipart</code></td><td>0.0.20</td><td>Required for file uploads. Without it the dropzone posts into a void.</td></tr>
+    <tr><td><code>itsdangerous</code></td><td>2.2.0</td><td>Signs the session cookie with a timestamp, which is what makes the freshness window possible.</td></tr>
+    <tr><td><code>webauthn</code></td><td>2.5.0</td><td>Passkey registration and assertion verification. Server-side challenge handling.</td></tr>
+    <tr><td><code>argon2-cffi</code></td><td>23.1.0</td><td>Argon2id for the PIN, setup codes and recovery codes. Deliberately slow.</td></tr>
+    <tr><td><code>httpx</code></td><td>0.28.1</td><td>HTTP client, and the test client's transport.</td></tr>
+    <tr><td><code>google-genai</code></td><td>2.20.0</td><td>The Gemini backend. Transcription and summarisation.</td></tr>
+    <tr><td><code>pytest</code></td><td>8.3.4</td><td>83 tests. The installer runs them before it restarts the service.</td></tr>
+  </table>
+
+  <div class="callout scar">
+    <span class="label">Scar</span>
+    <code>google-genai</code> was missing from this list for the whole of the
+    build. The application ran, the tests passed, and
+    <code>ENYGMA_PIPELINE=gemini</code> had never once been capable of working —
+    the first real meeting failed on <code>ImportError</code>. There is now a test
+    asserting the dependency is declared, and the backend's import error names the
+    command to fix it instead of saying <em>cannot import name 'genai'</em>.
+  </div>
+
+  <h2>Front-end stack</h2>
+  <p>
+    There isn't one. Two CSS files and one JavaScript module, served directly,
+    no bundler.
+  </p>
+  <ul>
+    <li><code>tokens.css</code> is <em>generated</em> by
+      <code>tools/gen_tokens.py</code> from a single palette. Raw hex anywhere
+      else fails review.</li>
+    <li><code>app.css</code> contains references only — every colour is a
+      <code>var()</code>.</li>
+    <li><code>app.js</code> is one ES module. Every block guards on its own
+      elements, so a page without a dropzone simply skips that block.</li>
+  </ul>
+
+  <div class="callout scar">
+    <span class="label">Scar</span>
+    An undefined CSS custom property does not warn. The whole declaration becomes
+    invalid, the browser drops it, and a layout quietly collapses with nothing in
+    the console. <code>tools/check_tokens.py</code> fails the build on any
+    <code>var()</code> that nothing defines, and the installer runs it. It has
+    caught this class of bug more than once.
+  </div>
+
+  <h2>Fonts and the mark</h2>
+  <p>
+    Inter for prose, JetBrains Mono for labels, timestamps and anything that is a
+    literal. The mark is a 4×4 cipher grid on a 64-unit box — cell 13, gap 3,
+    offset 1.5, radius 1.6, with four cells voided — and it is drawn from those
+    numbers everywhere it appears, including the PWA launcher icons, which are
+    generated by <code>tools/gen_icons.py</code> rather than traced. The icon and
+    the mark cannot drift apart because they are the same specification.
+  </p>
+</section>
+
+<section class="page body-page">
+  <h1 class="chapter">Chapter 6 &nbsp;|&nbsp; Accounts, network topology and cost</h1>
+  <div class="chapter-meta"><span class="label">Part 2 · Bill of Materials</span><span>06</span></div>
+
+  <h2>Required accounts</h2>
+
+  <h3>Cloudflare — free</h3>
+  <p>
+    Holds the <code>arkhm.io</code> zone and terminates the tunnel. Already in
+    use for PHNTM; ENYGMA adds one hostname and one DNS record to the existing
+    account and tunnel.
+  </p>
+
+  <h3>Google Cloud / AI Studio — paid tier, required</h3>
+  <p>
+    Supplies the Gemini API key. <strong>The paid tier is not optional here, and
+    not for rate limits.</strong> On the free tier Google's terms permit prompts
+    and responses to be used to improve their products. What ENYGMA sends is
+    other people's voices, client names and contract terms from an employer's
+    meetings. That cannot go through a tier whose terms allow training on it.
+  </p>
+  <div class="callout danger">
+    <span class="label">Warning</span>
+    Do not run a real meeting through a project that is still on the free tier.
+    Confirm the project reads as paid <em>before</em> the first upload, not after.
+  </div>
+  <p>
+    The key lives in <strong>its own Google Cloud project</strong>, not PHNTM's.
+    The project is the unit of attribution and revocation: a second key inside
+    PHNTM's project shares quota, billing lines and blast radius, and killing the
+    project kills both systems. Restrict the key to the Gemini API.
+  </p>
+
+  <h3>A domain</h3>
+  <p>
+    <code>arkhm.io</code>, already owned. ENYGMA occupies the
+    <code>enygma</code> subdomain and nothing else.
+  </p>
+
+  <h2>Network topology</h2>
+  <pre><code>Yahya's phone / laptop
+        │  https
+        ▼
+Cloudflare edge          proxied, orange cloud, TLS terminated here
+        │
+        │  outbound tunnel, established by the host
+        ▼
+cloudflared on spark-4d80
+        │
+        ├── enygma.arkhm.io ──▶ 127.0.0.1:4073   ENYGMA
+        └── arkhm.io, www    ──▶ 127.0.0.1:4063   PHNTM</code></pre>
+  <p>
+    The host opens no inbound port. <code>cloudflared</code> makes an outbound
+    connection and the edge routes back down it, so there is nothing to port
+    forward and nothing listening on the public internet. Both applications bind
+    to loopback only.
+  </p>
+
+  <h2>Cost summary</h2>
+  <table>
+    <tr><th>Line</th><th>Cost</th><th>Note</th></tr>
+    <tr><td>Cloudflare</td><td>$0</td><td>Free plan covers tunnel, DNS and TLS.</td></tr>
+    <tr><td>Domain</td><td>already owned</td><td>Shared with PHNTM.</td></tr>
+    <tr><td>Gemini API</td><td>cents per meeting</td><td>Audio is inexpensive; a $10 prepay balance covers months at this volume.</td></tr>
+    <tr><td>Hardware</td><td>$0 marginal</td><td>Shares <code>spark-4d80</code> with PHNTM.</td></tr>
+    <tr><td>Electricity</td><td>negligible</td><td>The machine was already running.</td></tr>
+  </table>
+  <p>
+    Prepay rather than postpay is the recommendation for a system handed to
+    someone else: it fails closed. A runaway loop stops at the credit balance
+    instead of arriving as a bill.
+  </p>
+</section>
+
+<!-- ═══════════════════ PART 3 ═══════════════════ -->
+<section class="dark part-divider">
+  <div class="label">Part Three</div>
+  <div>
+    <h1>Build</h1>
+    <p class="summary">
+      Getting a release onto the host, configuring it, and proving it works
+      before trusting it.
+    </p>
+  </div>
+  <div class="toc-mini">
+    <div><span class="ch">07</span><span>Deployment</span></div>
+    <div><span class="ch">08</span><span>Configuration</span></div>
+    <div><span class="ch">09</span><span>First run and verification</span></div>
+  </div>
+</section>
+
+<section class="page body-page">
+  <h1 class="chapter">Chapter 7 &nbsp;|&nbsp; Deployment</h1>
+  <div class="chapter-meta"><span class="label">Part 3 · Build</span><span>07</span></div>
+
+  <p class="lede">
+    One script does the whole thing and is safe to run twice. It refuses to
+    proceed rather than guessing, and it runs the test suite before it restarts
+    anything.
+  </p>
+
+  <h2>Step 1 — Get the release onto the host</h2>
+  <p>From a clone, which is the recommended path:</p>
+  <pre class="term"><code><span class="prompt">$</span> git clone https://github.com/dshafique/ENYGMA.git ~/enygma-release
+<span class="prompt">$</span> cd ~/enygma-release
+<span class="prompt">$</span> python3 tools/stamp_release.py
+<span class="out">Mk II.5   build 5.2026.08.27.0526</span></code></pre>
+  <p>
+    <code>stamp_release.py</code> writes <code>VERSION</code> and
+    <code>MARK</code> from the commit count. Both are build artifacts and are not
+    in the repository, because committing them would mean the number changes the
+    number it reports.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">Warning</span>
+    If you deploy from an extracted archive instead of a clone, extract into a
+    <strong>clean</strong> directory. Unpacking over an old copy leaves deleted
+    files behind, and a stale template shadows a new one.
+  </div>
+
+  <h2>Step 2 — Run the installer</h2>
+  <pre class="term"><code><span class="prompt">$</span> sudo bash deploy/install-on-spark.sh</code></pre>
+
+  <p>In order, it:</p>
+  <ol>
+    <li><strong>Announces the release</strong> it is about to install and the one
+      it is replacing. A stale deployment is visible before anything is touched.</li>
+    <li><strong>Checks Python</strong> is 3.10 or newer, and that <code>venv</code>
+      is available.</li>
+    <li><strong>Checks the port.</strong> If something answers on 4073 and it is
+      not ENYGMA, it stops. Two applications on one port is exactly the coupling
+      this design avoids.</li>
+    <li><strong>Creates the unix user</strong> if absent, and sets the
+      permissions that make isolation real.</li>
+    <li><strong>Replaces release-owned directories</strong> —
+      <code>src/ tools/ tests/ deploy/</code> — outright, then unpacks.
+      <code>data/</code>, <code>uploads/</code>, <code>.env</code> and
+      <code>.venv/</code> are the operator's and are never touched.</li>
+    <li><strong>Builds the virtualenv</strong> and installs
+      <code>requirements.txt</code>.</li>
+    <li><strong>Writes <code>.env</code> if absent</strong>, with a freshly
+      generated session secret at mode 600. An existing one is left alone.</li>
+    <li><strong>Proves it before wiring it up:</strong> runs migrations, the token
+      lint, the <code>.env</code> check and the full test suite <em>as the
+      <code>enygma</code> user</em>. A failure here stops the deployment with the
+      old version still running.</li>
+    <li><strong>Installs the systemd unit</strong> and restarts.</li>
+    <li><strong>Verifies</strong> <code>/healthz</code> answers and that no other
+      account can read the database, the audio or the secret.</li>
+  </ol>
+
+  <h2>Step 3 — Backups, once per machine</h2>
+  <pre class="term"><code><span class="prompt">$</span> sudo bash deploy/install-backups.sh</code></pre>
+  <p>
+    Takes one immediately so the first backup is not scheduled for tonight,
+    verifies it by restoring it, installs
+    <code>/etc/cron.daily/enygma-backup</code>, then runs the scheduled job
+    directly to prove the schedule itself works and not merely the command.
+  </p>
+
+  <h2>What a correct install looks like</h2>
+  <pre class="term"><code><span class="out">==&gt; release 5.2026.08.27.0526  (from /home/arkhm/enygma-release)
+    replacing build 4.2026.08.27.0519
+    python3 3.12
+==&gt; code into /home/enygma/app
+==&gt; migrations and tests, as enygma
+    applied 005_pairing.sql
+ok: 52 tokens defined, every var() reference resolves
+No problems found.
+83 passed in 4.9s
+==&gt; systemd
+    8589934592 memory ceiling in force
+==&gt; checks
+    healthz: {"ok":true,...,"mark":"Mk II.5"}
+    no other account can read the database, the audio or the secret</span></code></pre>
+  <p>
+    If the token count, the test count or the mark differ from what you expect,
+    you are installing something other than what you think you are.
+  </p>
+</section>
+
+<section class="page body-page">
+  <h1 class="chapter">Chapter 8 &nbsp;|&nbsp; Configuration</h1>
+  <div class="chapter-meta"><span class="label">Part 3 · Build</span><span>08</span></div>
+
+  <p class="lede">
+    Everything comes from the environment. Nothing is hardcoded, and
+    <code>.env</code> is data — it is parsed, never executed.
+  </p>
+
+  <h2>Editing it safely</h2>
+  <pre class="term"><code><span class="prompt">$</span> sudo -u enygma nano /home/enygma/app/.env</code></pre>
+  <div class="callout warn">
+    <span class="label">Warning</span>
+    Paste that line <strong>on its own</strong>. An editor takes over the
+    terminal, so anything pasted after it goes into the file instead of the
+    shell.
+  </div>
+
+  <h2>Checking it before restarting</h2>
+  <pre class="term"><code><span class="prompt">$</span> sudo -u enygma bash -c "cd /home/enygma/app &amp;&amp; .venv/bin/python tools/check_env.py"
+<span class="out">/home/enygma/app/.env  mode 600
+
+  ENYGMA_PORT                  4073
+  ENYGMA_PIPELINE              gemini
+  ENYGMA_SESSION_SECRET        set, 64 chars, ends x7Qa
+  ENYGMA_GEMINI_API_KEY        set, 39 chars, ends 9fLk
+
+No problems found.</span></code></pre>
+  <p>
+    Secrets are never printed, only described. The check reports stray
+    non-assignment lines, duplicate keys, a <code>gemini</code> pipeline with no
+    key, an empty session secret, and the wrong file mode. The installer runs it
+    on every deployment.
+  </p>
+
+  <div class="callout scar">
+    <span class="label">Scar</span>
+    <code>run.sh</code> used to <em>source</em> <code>.env</code>, which means
+    every line in it executed as the application user at each start. A pasted
+    command block once landed inside that file. Under systemd it would have run
+    on every restart, failed without a TTY, tripped <code>set -e</code> and
+    produced a restart loop. It is now parsed as <code>KEY=VALUE</code> and
+    anything else is named on stderr and ignored.
+  </div>
+
+  <h2>Switching on the real pipeline</h2>
+  <pre><code>ENYGMA_PIPELINE=gemini
+ENYGMA_GEMINI_API_KEY=AIza...</code></pre>
+  <pre class="term"><code><span class="prompt">$</span> sudo systemctl restart enygma</code></pre>
+  <p>
+    Confirm in <strong>Settings</strong>: the Pipeline card must read
+    <code>GEMINI</code>, not <code>STUB</code>, and the amber banner on Meetings
+    must be gone. The file saying <code>gemini</code> is not proof the process
+    read it.
+  </p>
+  <p>The full variable reference is Appendix A.</p>
+</section>
+
+<section class="page body-page">
+  <h1 class="chapter">Chapter 9 &nbsp;|&nbsp; First run and verification</h1>
+  <div class="chapter-meta"><span class="label">Part 3 · Build</span><span>09</span></div>
+
+  <h2>Is it alive?</h2>
+  <pre class="term"><code><span class="prompt">$</span> systemctl is-active enygma
+<span class="out">active</span>
+<span class="prompt">$</span> curl -s https://enygma.arkhm.io/healthz
+<span class="out">{"ok":true,"app":"enygma","port":4073,"version":"5.2026.08.27.0526","mark":"Mk II.5"}</span></code></pre>
+  <p>
+    <code>/healthz</code> is the only route that needs no session. The
+    <code>mark</code> it returns is the one thing to check after any deployment:
+    if it is not the build you just installed, nothing else you observe means
+    what you think it means.
+  </p>
+
+  <h2>Enrolling the first device</h2>
+  <p>
+    Open <code>https://enygma.arkhm.io</code>. With nothing enrolled the lock
+    screen offers <strong>Create your passkey</strong> and nothing else — the
+    first device to enrol becomes the owner.
+  </p>
+  <div class="callout note">
+    <span class="label">Note</span>
+    Enrol on the device that will be used most, usually the phone. Adding the
+    second device afterwards is a two-minute job (Chapter 12); there is no
+    penalty for choosing either order, but there is a penalty for enrolling on a
+    machine you rarely open.
+  </div>
+
+  <h2>Setting the PIN</h2>
+  <p>
+    <strong>Settings → PIN.</strong> Four to ten digits. This is the way back in
+    when the passkey is unavailable, and it is what bootstraps a second device if
+    a setup code has expired. Set it before you need it.
+  </p>
+
+  <h2>A demo week, optional</h2>
+  <pre class="term"><code><span class="prompt">$</span> sudo -u enygma bash -c "cd /home/enygma/app &amp;&amp; .venv/bin/python tools/seed_demo.py"
+<span class="out">wrote 5 demo recording(s). Remove with --clear.</span></code></pre>
+  <p>
+    Five meetings with transcripts, speakers, summaries and actions, so every tab
+    has something in it while you look around. Everything it writes is tagged
+    <code>source='demo'</code> and comes out again with <code>--clear</code>,
+    which leaves real uploads untouched.
+  </p>
+  <p>
+    It seeds no headlines and no observations about the operator. Those would be
+    inventions about a real person, and Tenet 05 applies to demo data too.
+  </p>
+
+  <h2>The first real recording</h2>
+  <p>
+    Drop a file on Meetings and watch it:
+  </p>
+  <pre class="term"><code><span class="prompt">$</span> journalctl -u enygma -f</code></pre>
+  <p>
+    Expect <code>queued</code> for up to three seconds, then
+    <code>transcribing</code>, then <code>ready</code>. The page refreshes itself
+    while something is running — but only for what is actually on view, so
+    reading one meeting is not interrupted because a different one is still
+    working.
+  </p>
+  <p>
+    If it fails, the reason is on the meeting page verbatim, with a
+    <strong>Try again</strong> that requeues without re-uploading. Chapter 17
+    lists what the reasons mean.
+  </p>
+</section>
+
+<!-- ═══════════════════ PART 4 ═══════════════════ -->
+<section class="dark part-divider">
+  <div class="label">Part Four</div>
+  <div>
+    <h1>Access &amp; Auth</h1>
+    <p class="summary">
+      How it reaches the internet, how it decides you are you, and what to do
+      when that goes wrong. The half that is easiest to get subtly wrong.
+    </p>
+  </div>
+  <div class="toc-mini">
+    <div><span class="ch">10</span><span>Cloudflare Tunnel and DNS</span></div>
+    <div><span class="ch">11</span><span>Passkeys and the freshness window</span></div>
+    <div><span class="ch">12</span><span>Setup codes, PIN and adding a device</span></div>
+    <div><span class="ch">13</span><span>Recovery procedures and threat model</span></div>
+    <div><span class="ch">14</span><span>Installing as an app</span></div>
+  </div>
+</section>
+
+<section class="page body-page">
+  <h1 class="chapter">Chapter 10 &nbsp;|&nbsp; Cloudflare Tunnel and DNS</h1>
+  <div class="chapter-meta"><span class="label">Part 4 · Access &amp; Auth</span><span>10</span></div>
+
+  <h2>Mental model</h2>
+  <p>
+    <code>cloudflared</code> runs on the host and makes an <em>outbound</em>
+    connection to Cloudflare's edge. Requests for <code>enygma.arkhm.io</code>
+    arrive at the edge and are routed back down that connection. The host opens
+    no port; there is nothing to forward and nothing exposed.
+  </p>
+  <p>
+    One <code>cloudflared</code> instance serves both applications. Its config
+    maps hostnames to local ports, and ENYGMA's rule must sit <strong>above the
+    catch-all</strong>, because the first match wins.
+  </p>
+
+  <h2>The two pieces</h2>
+  <p><strong>1. An ingress rule</strong> in the cloudflared config:</p>
+  <pre><code>ingress:
+  - hostname: enygma.arkhm.io
+    service: http://127.0.0.1:4073
+  - hostname: arkhm.io
+    service: http://127.0.0.1:4063
+  - service: http_status:404          # catch-all, always last</code></pre>
+
+  <p><strong>2. A DNS record</strong> in the zone:</p>
+  <table>
+    <tr><th>Type</th><th>Name</th><th>Target</th><th>Proxy</th></tr>
+    <tr><td>CNAME</td><td><code>enygma</code></td><td><code>&lt;tunnel-uuid&gt;.cfargotunnel.com</code></td><td><strong>Proxied</strong></td></tr>
+  </table>
+
+  <div class="callout danger">
+    <span class="label">Warning</span>
+    The orange cloud is not optional. An unproxied CNAME to
+    <code>cfargotunnel.com</code> does not resolve at all — the name only exists
+    inside Cloudflare's network. A grey cloud here produces
+    <em>Server Not Found</em>, which reads like a DNS outage.
+  </div>
+
+  <p>
+    <code>deploy/dns-record.sh</code> reads the tunnel config and prints exactly
+    the record required. It is read-only and changes nothing.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">Warning</span>
+    The cloudflared config is serving PHNTM right now. Back it up before editing,
+    validate after, and restore on any doubt.
+    <code>deploy/add-tunnel-route.sh</code> does all three.
+  </div>
+
+  <div class="callout scar">
+    <span class="label">Scar</span>
+    <code>cloudflared tunnel ingress validate --config X</code> puts the flag in
+    the wrong place; the flag must precede the subcommand. Worse,
+    <code>cloudflared</code> exits 0 on that usage error, so a script that trusted
+    the exit code printed <em>ingress rules are valid</em> having validated
+    nothing at all. The script now reads the command's output, and restores the
+    backup if it cannot find an explicit success.
+  </div>
+
+  <h2>Verifying, from outside</h2>
+  <pre class="term"><code><span class="prompt">$</span> curl -s https://enygma.arkhm.io/healthz
+<span class="out">{"ok":true,...,"mark":"Mk II.5"}</span>
+<span class="prompt">$</span> curl -s -o /dev/null -w "%{http_code}\n" https://arkhm.io/
+<span class="out">200</span></code></pre>
+  <p>
+    Always check PHNTM in the same breath. The whole risk of touching this config
+    is that ENYGMA comes up and something else quietly goes down.
+  </p>
+</section>
+
+<section class="page body-page">
+  <h1 class="chapter">Chapter 11 &nbsp;|&nbsp; Passkeys and the freshness window</h1>
+  <div class="chapter-meta"><span class="label">Part 4 · Access &amp; Auth</span><span>11</span></div>
+
+  <h2>Mental model</h2>
+  <p>
+    A passkey is a private key generated by the device and held in its secure
+    hardware, released only by a biometric or device unlock. The server stores
+    the matching <em>public</em> key and a signature counter, and nothing else.
+    There is no shared secret to steal.
+  </p>
+  <p>
+    The credential is bound to the origin that created it —
+    <code>enygma.arkhm.io</code>, exactly. This is why <code>ENYGMA_RP_ID</code>
+    and <code>ENYGMA_ORIGIN</code> must match what the browser sees, and why a
+    passkey made against one hostname will not work against another.
+  </p>
+
+  <h2>Two levels of authorisation</h2>
+  <p>
+    Reading and writing are different questions, and ENYGMA answers them
+    differently.
+  </p>
+  <table>
+    <tr><th>Level</th><th>Needs</th><th>Covers</th></tr>
+    <tr><td><strong>View</strong></td><td>A valid session, any age</td>
+        <td>Every page, the audio, the Markdown copy, term lookups. Anything the page is already showing.</td></tr>
+    <tr><td><strong>Write</strong></td><td>A session verified within the freshness window</td>
+        <td>Uploads, ticking actions, naming speakers, sending chat, minting a setup code, changing the PIN.</td></tr>
+  </table>
+  <p>
+    The window is <code>ENYGMA_REAUTH_MINUTES</code>, default 30. Going stale
+    does not eject you: you keep reading, and the first write raises a small
+    sheet asking you to confirm. Prove it is you and the original action is
+    retried automatically — the page, the scroll position and anything typed all
+    survive.
+  </p>
+
+  <div class="callout scar">
+    <span class="label">Scar</span>
+    Before that sheet existed the window was five minutes, and a stale upload
+    returned <code>401</code> which the interface parsed as an empty result list
+    and rendered as nothing at all. The file appeared to vanish. A silent no is
+    the worst possible answer to <em>did that work</em>; every write now goes
+    through one wrapper that either succeeds, re-authenticates and retries, or
+    says what went wrong.
+  </div>
+
+  <h2>Lockout</h2>
+  <p>
+    Five failures across passkey, PIN and setup code <em>combined</em> — not five
+    each — then a delay that doubles each further round, capped at an hour.
+  </p>
+  <table>
+    <tr><th>Failures</th><th>Delay</th></tr>
+    <tr><td>5</td><td>30 seconds</td></tr>
+    <tr><td>10</td><td>60 seconds</td></tr>
+    <tr><td>20</td><td>4 minutes</td></tr>
+    <tr><td>50+</td><td>1 hour, capped</td></tr>
+  </table>
+  <p>
+    A flat delay is the wrong shape for a short PIN. A fat finger still costs
+    thirty seconds; an exhaustive search of a four-digit PIN now costs more than
+    a month of continuous attempts. A successful authentication clears the
+    counter entirely.
+  </p>
+  <p>
+    The lockout is server-side and keyed on the account. A client-side countdown
+    is decoration.
+  </p>
+</section>
+
+<section class="page body-page">
+  <h1 class="chapter">Chapter 12 &nbsp;|&nbsp; Setup codes, PIN and adding a device</h1>
+  <div class="chapter-meta"><span class="label">Part 4 · Access &amp; Auth</span><span>12</span></div>
+
+  <p class="lede">
+    A passkey belongs to the device that made it. A second device has no way in
+    on its own, and the two ways to give it one are not interchangeable.
+  </p>
+
+  <h2>The two credentials, which are not the same thing</h2>
+  <table>
+    <tr><th></th><th>PIN</th><th>Setup code</th></tr>
+    <tr><td>Looks like</td><td><code>0125</code> — 4 to 10 digits</td><td><code>B84C-5L28</code> — 8 letters and numbers</td></tr>
+    <tr><td>Lifetime</td><td>Standing, until changed</td><td>10 minutes, single use</td></tr>
+    <tr><td>Set from</td><td>Settings → PIN</td><td>Settings → Set up another device</td></tr>
+    <tr><td>Buys</td><td>A session</td><td>A session, in order to enrol one passkey</td></tr>
+    <tr><td>Use it when</td><td>The passkey is unavailable on a device already enrolled</td><td>A new device needs its own passkey</td></tr>
+  </table>
+
+  <div class="callout note">
+    <span class="label">Note</span>
+    Typing the PIN into the setup-code field is the single most likely mistake
+    here, and the screen now names it as such rather than saying <em>not valid or
+    has expired</em> — which was true, and useless, for every possible error.
+  </div>
+
+  <h2>Adding a device, the recommended way</h2>
+  <ol>
+    <li>On a device already signed in: <strong>Settings → Set up another
+      device</strong>. An eight-character code appears. It is shown once and only
+      its hash is stored.</li>
+    <li>On the new device: open <code>enygma.arkhm.io</code> → <strong>Set up
+      this device</strong> → enter the code.</li>
+    <li>It signs that device in and immediately prompts to create a passkey
+      there. Done.</li>
+  </ol>
+  <p>
+    Minting a code needs a <em>fresh</em> session, because it is the one
+    credential that creates other credentials and a left-open tab should not be
+    able to produce one. Creating a new code cancels any outstanding one: two
+    live codes means one of them is forgotten, and a forgotten credential is the
+    one that gets used against you.
+  </p>
+
+  <h2>Adding a device with the PIN instead</h2>
+  <p>
+    Open the site on the new device, choose <strong>Use PIN instead</strong>,
+    then <strong>Settings → Add this device</strong>. This works and is the
+    fallback when no signed-in device is to hand — but it means the standing
+    secret gets typed on one more device, which is precisely what setup codes
+    exist to avoid.
+  </p>
+
+  <h2>Removing a device</h2>
+  <p>
+    <strong>Settings → Devices → Revoke.</strong> The credential is marked
+    revoked rather than deleted, so the record of what existed survives. A revoked
+    passkey stops working immediately.
+  </p>
+</section>

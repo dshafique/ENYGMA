@@ -89,6 +89,10 @@ class Config:
     GEMINI_MODEL = os.environ.get("ENYGMA_GEMINI_MODEL", "gemini-3.5-flash")
     # 20 MB is the documented inline threshold; above it the Files API is required.
     GEMINI_INLINE_LIMIT = 20 * 1024 * 1024
+    # A long meeting is a long transcript. The default ceiling is low enough that
+    # an hour of speech gets cut off mid-token, which fails as a JSON error and
+    # looks like the model malfunctioning.
+    MAX_OUTPUT_TOKENS = int(os.environ.get("ENYGMA_MAX_OUTPUT_TOKENS", "65536"))
     WORKER_POLL_SECONDS = float(os.environ.get("ENYGMA_WORKER_POLL_SECONDS", "3"))
 
     # HiNotes. The base URL is not in the handoff; lift it from PHNTM's
