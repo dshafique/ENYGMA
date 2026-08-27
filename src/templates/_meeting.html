@@ -1,0 +1,138 @@
+{# The right-hand pane of the Meetings split. Expects `data`. #}
+{% import "_icons.html" as i %}
+{% set r = data.recording %}
+<div class="detail-inner">
+
+  <a class="btn ghost sm" href="/meetings" id="backtolist" style="margin-bottom:var(--space-12)">
+    {{ i.icon('back') }} All meetings</a>
+
+  <h1>{{ r.title }}</h1>
+  <div class="detail-meta">
+    <span>{{ (r.recorded_at or r.created_at)|longdate }}</span>
+    <span>{{ (r.recorded_at or r.created_at)|clock }}</span>
+    <span class="mono">{{ r.duration_ms|hms }}</span>
+    <span class="pill {{ r.status }}"><i class="dot"></i>{{ r.status|upper }}</span>
+  </div>
+
+  {% if r.status == 'failed' %}
+  <div class="banner bad" style="margin-top:var(--space-20)">
+    <span class="label">Failed</span>
+    <p>{{ r.failure or 'No reason was recorded.' }}</p>
+    <button class="btn line sm" id="retry" data-id="{{ r.id }}"
+            style="margin-top:var(--space-12)">Try again</button>
+  </div>
+  {% elif r.status in ('queued', 'transcribing') %}
+  <div class="banner" style="margin-top:var(--space-20)">
+    <span class="label">{{ r.status|upper }}</span>
+    <p>This page refreshes itself when the transcript lands.</p>
+    <div class="bar"><i></i></div>
+  </div>
+  {% endif %}
+
+  <div class="speakers">
+    {% for s in data.speakers %}
+    <span class="spk{{ '' if s.person_name else ' unnamed' }}">
+      <span class="av">{{ (s.person_name or s.label)|initials }}</span>
+      <input value="{{ s.person_name or '' }}" placeholder="{{ s.label }}"
+             data-speaker="{{ s.label }}" data-rec="{{ r.id }}"
+             aria-label="Name for {{ s.label }}">
+    </span>
+    {% endfor %}
+  </div>
+
+  <div class="tabs" role="tablist">
+    <button role="tab" aria-selected="true" data-tab="summary">Summary</button>
+    <button role="tab" aria-selected="false" data-tab="transcript">Transcript</button>
+    <button role="tab" aria-selected="false" data-tab="actions">Actions</button>
+  </div>
+
+  <div class="tab on measure" id="tab-summary">
+    {% if data.summary.abstract %}
+      <div class="block">
+        <span class="label">Abstract</span>
+        <p>{{ data.summary.abstract }}</p>
+      </div>
+    {% endif %}
+    {% if data.summary.decisions %}
+      <div class="block">
+        <span class="label">Decisions</span>
+        {% for d in data.summary.decisions %}
+        <div class="item">
+          <span class="txt">{{ d.text }}</span>
+          <button class="stamp" data-seek="{{ d.at_ms }}">{{ d.at_ms|mmss }}</button>
+        </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+    {% if data.summary.questions %}
+      <div class="block">
+        <span class="label">Open questions</span>
+        {% for q in data.summary.questions %}
+        <div class="item">
+          <span class="txt">{{ q.text }}</span>
+          <button class="stamp" data-seek="{{ q.at_ms }}">{{ q.at_ms|mmss }}</button>
+        </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+    {% if not data.summary.abstract and not data.summary.decisions and not data.summary.questions %}
+      <div class="empty"><div class="cell"></div>
+        <p>No summary yet. It is written once the transcript is complete.</p></div>
+    {% endif %}
+    {% if data.summary.model %}
+      <p class="label">Summarised by {{ data.summary.model }}</p>
+    {% endif %}
+  </div>
+
+  <div class="tab measure termable" id="tab-transcript">
+    {% if data.segments %}
+      {% for s in data.segments %}
+      <div class="seg" data-start="{{ s.start_ms }}" data-end="{{ s.end_ms }}">
+        <div class="who">
+          <span>{{ s.speaker_label }}</span>
+          <button class="stamp" data-seek="{{ s.start_ms }}">{{ s.start_ms|mmss }}</button>
+        </div>
+        <p>{{ s.text }}</p>
+      </div>
+      {% endfor %}
+      <p class="label" style="margin-top:var(--space-24)">
+        Hold a word to ask ENYGMA what it is</p>
+    {% else %}
+      <div class="empty"><div class="cell"></div>
+        <p>No transcript yet.</p></div>
+    {% endif %}
+  </div>
+
+  <div class="tab measure" id="tab-actions">
+    {% if data.actions %}
+      {% for a in data.actions %}
+      <label class="item{{ ' done' if a.done_at }}">
+        <input type="checkbox" data-action="{{ a.id }}" {{ 'checked' if a.done_at }}>
+        <span class="txt">{{ a.text }}
+          <span class="where">{{ a.owner or 'unassigned' }}{% if a.due_date %} · due {{ a.due_date }}{% endif %}</span>
+        </span>
+        {% if a.at_ms is not none %}<button class="stamp" data-seek="{{ a.at_ms }}">{{ a.at_ms|mmss }}</button>{% endif %}
+      </label>
+      {% endfor %}
+    {% else %}
+      <div class="empty"><div class="cell"></div>
+        <p>No actions were found in this meeting.</p></div>
+    {% endif %}
+  </div>
+
+  {% if r.audio_path %}
+  <div class="playerbar">
+    <audio id="audio" controls preload="metadata" src="/meetings/{{ r.id }}/audio"></audio>
+  </div>
+  {% endif %}
+</div>
+
+<div class="pop" id="pop" hidden role="dialog" aria-label="Term">
+  <div class="t" id="pop-term"></div>
+  <div class="k" id="pop-kind"></div>
+  <div class="g" id="pop-gloss"></div>
+  <div class="acts">
+    <button class="btn sm" id="pop-more">Learn more</button>
+    <button class="btn ghost sm" id="pop-close">Close</button>
+  </div>
+</div>

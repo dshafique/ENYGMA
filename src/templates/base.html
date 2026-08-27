@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en" data-nav="{{ nav|default('') }}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#0d0d0f">
+<title>{% block title %}ENYGMA{% endblock %}</title>
+<link rel="icon" href="/static/favicon.svg?v={{ build }}" type="image/svg+xml">
+<link rel="stylesheet" href="/static/css/tokens.css?v={{ build }}">
+<link rel="stylesheet" href="/static/css/app.css?v={{ build }}">
+<script>
+  /* Before first paint, so a chosen theme never flashes the other one. */
+  try { var t = localStorage.getItem("enygma-theme");
+        if (t) document.documentElement.setAttribute("data-theme", t); } catch (e) {}
+</script>
+</head>
+<body class="{% block bodyclass %}{% endblock %}">
+{% block shell %}
+{% import "_icons.html" as i %}
+{% from "_mark.html" import mark %}
+{% set tabs = [
+     ('home',      '/',          'Home'),
+     ('meetings',  '/meetings',  'Meetings'),
+     ('chat',      '/chat',      'Chat'),
+     ('actions',   '/actions',   'Actions'),
+     ('directory', '/directory', 'Directory')] %}
+
+<nav class="rail" aria-label="Sections">
+  <a class="rail-mark" href="/" aria-label="ENYGMA home">{{ mark() }}</a>
+  <ul>
+    {% for key, href, label in tabs %}
+    <li>
+      <a href="{{ href }}" class="rail-item{% if nav == key %} on{% endif %}"
+         {% if nav == key %}aria-current="page"{% endif %}>
+        {{ i.icon(key) }}<span>{{ label }}</span>
+      </a>
+    </li>
+    {% endfor %}
+  </ul>
+  <div class="rail-foot">
+    <button class="rail-item" id="theme" type="button" aria-label="Switch theme">
+      {{ i.icon('sun') }}<span>Theme</span>
+    </button>
+    <a href="/settings" class="rail-item{% if nav == 'settings' %} on{% endif %}"
+       {% if nav == 'settings' %}aria-current="page"{% endif %}>
+      {{ i.icon('settings') }}<span>Settings</span>
+    </a>
+  </div>
+</nav>
+
+<span class="markbadge desk mono" title="Build {{ build }}">{{ mark_label }}</span>
+
+<div class="mobilebar">
+  <a class="mobilebar-mark" href="/" aria-label="ENYGMA home">{{ mark() }}</a>
+  <div class="spread">
+    <span class="markbadge mono" title="Build {{ build }}">{{ mark_label }}</span>
+    <button class="iconbtn" id="theme-m" type="button" aria-label="Switch theme">
+      {{ i.icon('sun') }}</button>
+    <a class="iconbtn{% if nav == 'settings' %} on{% endif %}" href="/settings"
+       aria-label="Settings"
+       {% if nav == 'settings' %}aria-current="page"{% endif %}>{{ i.icon('settings') }}</a>
+  </div>
+</div>
+
+<main class="main">{% block main %}{% endblock %}</main>
+
+<nav class="tabbar" aria-label="Sections">
+  {% for key, href, label in tabs %}
+  <a href="{{ href }}" class="tab-item{% if nav == key %} on{% endif %}"
+     {% if nav == key %}aria-current="page"{% endif %}>
+    {{ i.icon(key) }}<span>{{ label }}</span>
+  </a>
+  {% endfor %}
+</nav>
+{% endblock %}
+<script src="/static/js/app.js?v={{ build }}" type="module"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}{{ code }} — ENYGMA{% endblock %}
+{% block main %}
+<div class="page">
+  <div class="empty">
+    <div class="cell"></div>
+    <h2>{{ code }}</h2>
+    <p>{{ detail }}</p>
+    <p style="margin-top:var(--space-24)"><a class="btn line sm" href="/">Back to Home</a></p>
+  </div>
+</div>
+{% endblock %}

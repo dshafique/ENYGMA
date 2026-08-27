@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% from "_mark.html" import mark %}
+{% block title %}ENYGMA{% endblock %}
+{% block bodyclass %}bare{% endblock %}
+{% block shell %}
+<main class="shell">
+  <div class="stack">
+    {{ mark() }}
+    <div class="wordmark">ENYGMA</div>
+    <p class="muted" id="state">{% if lockout %}Locked{% else %}Locked{% endif %}</p>
+
+    {% if lockout %}
+      <p class="mono danger" style="font-size:44px;font-weight:700" id="countdown">0:{{ '%02d' % lockout }}</p>
+      <p class="dim" style="max-width:280px">This is a rate limit, not a lockout. Your data is untouched.</p>
+    {% endif %}
+
+    <p class="msg dim" id="msg"></p>
+
+    {% if enrolled %}
+      <button class="btn wide" id="unlock" {% if lockout %}disabled{% endif %}>Unlock with passkey</button>
+      <button class="btn ghost wide" id="pin">Use PIN instead</button>
+    {% else %}
+      <button class="btn wide" id="create">Create your passkey</button>
+      <p class="dim" style="max-width:320px">No device is enrolled yet. This is the first one.</p>
+    {% endif %}
+
+    <p class="label" style="margin-top:32px">No password exists in this product</p>
+  </div>
+</main>
+
+<script type="module">
+import { enrol, unlock } from "/static/js/passkey.js?v={{ build }}";
+const msg = document.getElementById("msg");
+const say = (t, bad) => { msg.textContent = t; msg.className = "msg " + (bad ? "danger" : "dim"); };
+
+document.getElementById("create")?.addEventListener("click", async () => {
+  try { await enrol(navigator.userAgent.includes("Android") ? "Android device" : "This device", say);
+        location.href = "/"; }
+  catch (e) { say(e.data?.detail || "That did not complete. Try again.", true); }
+});
+
+document.getElementById("unlock")?.addEventListener("click", async () => {
+  try { await unlock(say); location.href = "/"; }
+  catch (e) {
+    if (e.status === 429) say(`Locked for ${e.data.detail.lockout} seconds`, true);
+    else say("Try again", true);
+  }
+});
+</script>
+{% endblock %}

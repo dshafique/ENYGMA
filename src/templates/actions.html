@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Action items — ENYGMA{% endblock %}
+{% block main %}
+<header class="topbar">
+  <div class="grow">
+    <h1>Action items</h1>
+    <p class="sub">{{ data.open|length }} open · {{ data.done|length }} done</p>
+  </div>
+</header>
+
+<div class="page measure">
+  {% if data.open %}
+    <div class="block">
+      <span class="label">Open</span>
+      {% for a in data.open %}
+      <label class="item">
+        <input type="checkbox" data-action="{{ a.id }}">
+        <span class="txt">{{ a.text }}
+          <span class="where">{{ a.owner_name or a.owner or 'unassigned' }} ·
+            <a href="/meetings/{{ a.recording_id }}">{{ a.meeting }}</a> ·
+            {{ (a.recorded_at or a.created_at)|daygroup }}</span>
+        </span>
+      </label>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="empty"><div class="cell"></div>
+      <p>Nothing open. Actions are pulled out of each meeting when it is summarised,
+         so this fills itself.</p></div>
+  {% endif %}
+
+  {% if data.done %}
+  <div class="block">
+    <span class="label">Done</span>
+    {% for a in data.done %}
+    <label class="item done">
+      <input type="checkbox" data-action="{{ a.id }}" checked>
+      <span class="txt">{{ a.text }}
+        <span class="where">{{ a.owner_name or a.owner or 'unassigned' }} ·
+          <a href="/meetings/{{ a.recording_id }}">{{ a.meeting }}</a></span>
+      </span>
+    </label>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

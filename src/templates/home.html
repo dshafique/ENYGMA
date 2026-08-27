@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% import "_icons.html" as i %}
+{% block title %}Home — ENYGMA{% endblock %}
+{% block main %}
+<header class="hero">
+  <p class="label">{{ today }}</p>
+  <h1>{{ greeting }}, {{ handle }}</h1>
+  <p class="sub">
+    {% if d.counts.running %}{{ d.counts.running }} still running ·{% endif %}
+    {{ d.open_action_count }} open action{{ '' if d.open_action_count == 1 else 's' }} ·
+    {{ d.week_ms|hours }} h of meetings this week
+  </p>
+</header>
+
+<div class="page grid two">
+
+  <a class="card link" href="/meetings">
+    <div class="card-head"><h2>Meetings</h2><span class="label">{{ d.counts.total }} total</span></div>
+    {% if d.recent %}
+      {% for m in d.recent %}
+      <div class="row">
+        <div style="min-width:0">
+          <div class="rec-title">{{ m.title }}</div>
+          <div class="rec-meta">{{ m.recorded_at|daygroup }} · {{ m.recorded_at|clock or m.created_at|ago }}</div>
+        </div>
+        <span class="pill {{ m.status }}"><i class="dot"></i>{{ m.status|upper }}</span>
+      </div>
+      {% endfor %}
+    {% else %}
+      <p class="dim">Nothing yet. Drop an audio file on the Meetings tab and it starts here.</p>
+    {% endif %}
+  </a>
+
+  <div class="card">
+    <div class="card-head"><h2>Open actions</h2>
+      <a class="label" href="/actions">See all</a></div>
+    {% if d.open_actions %}
+      {% for a in d.open_actions %}
+      <label class="item">
+        <input type="checkbox" data-action="{{ a.id }}">
+        <span class="txt">{{ a.text }}
+          <span class="where">{{ a.owner_name or a.owner or 'unassigned' }} · {{ a.meeting }}</span>
+        </span>
+      </label>
+      {% endfor %}
+    {% else %}
+      <p class="dim">Nothing owed. Actions appear here the moment a meeting is summarised.</p>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <div class="card-head"><h2>In your realm</h2><span class="label">Tidbits</span></div>
+    {% if d.tidbits %}
+      {% for t in d.tidbits %}
+      <div class="tidbit">
+        <span class="n">{{ '%02d' % loop.index }}</span>
+        <div>
+          {% if t.url %}<a class="h" href="{{ t.url }}" rel="noopener noreferrer" target="_blank">{{ t.headline }}</a>
+          {% else %}<div class="h">{{ t.headline }}</div>{% endif %}
+          <div class="s">{{ t.source or 'unattributed' }}{% if t.topic %} · {{ t.topic }}{% endif %}</div>
+        </div>
+      </div>
+      {% endfor %}
+    {% else %}
+      <p class="dim">No headlines yet. This reads from a feed that is not connected,
+        and it stays empty rather than showing you something invented.</p>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <div class="card-head"><h2>What ENYGMA has learned</h2>
+      <a class="label" href="/chat">Open in Chat</a></div>
+    {% if d.observations %}
+      {% for o in d.observations %}
+      <div class="obs">
+        <span class="label">{{ o.kind }}</span>
+        <p>{{ o.body }}</p>
+      </div>
+      {% endfor %}
+    {% else %}
+      <p class="dim">Nothing yet. This fills in from what you ask in Chat and what you
+        hold down in transcripts — so it stays empty until there is something real to say.</p>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <div class="card-head"><h2>At a glance</h2></div>
+    <div class="grid three">
+      <div class="stat"><b>{{ d.counts.ready }}</b><span class="label">Ready</span></div>
+      <div class="stat"><b>{{ d.counts.running }}</b><span class="label">Running</span></div>
+      <div class="stat"><b>{{ d.people }}</b><span class="label">People</span></div>
+    </div>
+  </div>
+
+  <a class="card link" href="/chat">
+    <div class="card-head"><h2>Ask</h2>{{ i.icon('chat') }}</div>
+    <p class="dim">Hold any word in a transcript for a quick definition, or start here
+      and keep the thread. Everything you ask shapes what ENYGMA knows about you.</p>
+  </a>
+
+</div>
+{% endblock %}
