@@ -98,6 +98,35 @@ def analyse(recording_id: int, show_text: bool) -> int:
             collapse_at = None          # it recovered; not a collapse
         print(f"  {window:<14} {total:>5}  {distinct:>8}  {share}{flag}")
 
+    # --- is the transcript actually complete? ------------------------------
+    # Speaker labels are the obvious failure. The quieter one is a transcript
+    # that thins out: the model stays plausible and simply stops writing
+    # everything down, and a sparse stretch reads as a quiet stretch.
+    print(f"\n  {'window':<14} {'words':>7} {'wpm':>6}  density")
+    print("  " + "-" * 62)
+    rates = []
+    for b in range(0, span // (BUCKET_MIN * 60_000) + 1):
+        mine = [x for x in segs if (x["start_ms"] or 0) // (BUCKET_MIN * 60_000) == b]
+        words = sum(len((x["text"] or "").split()) for x in mine)
+        wpm = words / BUCKET_MIN
+        rates.append(wpm)
+        bar = "#" * min(40, int(wpm / 4))
+        print(f"  {b * BUCKET_MIN:>3}-{(b + 1) * BUCKET_MIN:<3} min   "
+              f"{words:>7} {wpm:>6.0f}  {bar}")
+
+    opening = rates[0] if rates else 0
+    thin = [i for i, r in enumerate(rates) if opening and r < opening * 0.25]
+    print()
+    if thin and opening > 40:
+        first = thin[0] * BUCKET_MIN
+        print(f"  Word rate falls below a quarter of the opening pace from about")
+        print(f"  {first} minutes. Either the room genuinely went quiet, or the model")
+        print(f"  stopped writing everything down. Listen to {first:02d}:00 and compare.")
+        print(f"  A model asked for a very long transcript in one piece tends to")
+        print(f"  summarise the later parts; transcribing in windows prevents it.")
+    elif opening:
+        print(f"  Word rate holds up across the recording (opening {opening:.0f} wpm).")
+
     # --- the verdict -------------------------------------------------------
     print()
     if collapse_at is not None:

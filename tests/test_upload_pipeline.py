@@ -497,3 +497,35 @@ def test_end_to_end_windowing_prevents_the_collapse(tmp_path):
         "attribution collapsed to one speaker despite windowing"
     times = [s.start_ms for s in out.segments]
     assert times == sorted(times), "segments must come out in order"
+
+
+def test_an_unmeasurable_recording_says_so_rather_than_transcribing_blind():
+    """Without ffprobe there is no way to know whether a recording needed
+    splitting. Transcribing it whole and saying nothing is how a half-wrong
+    transcript comes to look like a right one."""
+    import pathlib, tempfile, json
+    from src.pipeline import chunking, gemini
+
+    audio = pathlib.Path(tempfile.mkdtemp()) / "unknown.mp3"
+    audio.write_bytes(b"ID3" + b"\x0a" * 256)
+
+    class Fake:
+        class files:
+            @staticmethod
+            def upload(file): raise AssertionError("inline expected")
+        class interactions:
+            @staticmethod
+            def create(**kw):
+                class R: output_text = json.dumps({"segments": [
+                    {"speaker": "SPEAKER 1", "start": "00:00", "end": "00:05", "text": "hi"}]})
+                return R()
+
+    real = chunking.duration_ms
+    chunking.duration_ms = lambda p: None
+    try:
+        out = gemini.GeminiBackend(client=Fake()).transcribe(audio, "audio/mpeg")
+    finally:
+        chunking.duration_ms = real
+
+    assert out.note, "an unmeasurable recording must carry a warning"
+    assert "ffprobe" in out.note and "not trustworthy" in out.note
