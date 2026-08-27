@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Directory — ENYGMA{% endblock %}
+{% block main %}
+<header class="topbar">
+  <div class="grow">
+    <h1>Directory</h1>
+    <p class="sub">{{ people|length }} {{ 'person' if people|length == 1 else 'people' }}
+      {%- if unnamed %} · {{ unnamed }} speaker{{ '' if unnamed == 1 else 's' }} still unnamed{% endif %}</p>
+  </div>
+</header>
+
+<div class="page">
+  {% if people %}
+  <div class="grid auto">
+    {% for p in people %}
+    <div class="card">
+      <div class="person">
+        <span class="avatar">{{ p.initials }}</span>
+        <div style="min-width:0">
+          <h2>{{ p.name }}</h2>
+          <p class="sub">
+            {%- if p.role %}{{ p.role }}{% if p.org %} · {{ p.org }}{% endif %}
+            {%- else %}{{ p.meetings }} meeting{{ '' if p.meetings == 1 else 's' }} · {{ p.turns or 0 }} turns{% endif -%}
+          </p>
+        </div>
+      </div>
+      {% if p.note %}<p class="dim" style="font-size:14px">{{ p.note }}</p>{% endif %}
+      <div>
+        <span class="label">Appeared in</span>
+        {% for m in p.recent %}
+        <div class="row">
+          <a href="/meetings/{{ m.id }}">{{ m.title }}</a>
+          <span class="label">{{ m.recorded_at|daygroup }}</span>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+    <div class="empty"><div class="cell"></div>
+      <p>Nobody yet. Open a meeting and put a name on a speaker label — that is what
+         creates a person here. Nothing is merged automatically, because two similar
+         names are two people until you say otherwise.</p></div>
+  {% endif %}
+</div>
+{% endblock %}

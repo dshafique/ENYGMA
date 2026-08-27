@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% import "_icons.html" as i %}
+{% block title %}{% if data %}{{ data.recording.title }} — ENYGMA{% else %}Meetings — ENYGMA{% endif %}{% endblock %}
+{% block main %}
+<div class="split{% if data %} at-detail{% endif %}" id="split">
+
+  <aside class="pane">
+    <div class="pane-head">
+      <div class="spread" style="justify-content:space-between">
+        <div>
+          <h1 style="font-size:26px;line-height:32px">Meetings</h1>
+          <p class="sub">{{ meetings|length }} recording{{ '' if meetings|length == 1 else 's' }}
+            {%- if week_ms %} · {{ week_ms|hours }} h this week{% endif %}</p>
+        </div>
+      </div>
+      <div class="search">
+        {{ i.icon('search') }}
+        <input type="search" id="q" placeholder="Search meetings" autocomplete="off">
+      </div>
+      <div class="filters" role="tablist">
+        {% for key, label in [('all','All'),('ready','Ready'),('running','Running'),('failed','Failed')] %}
+        <button class="chip{{ ' on' if loop.first }}" data-filter="{{ key }}">{{ label }}</button>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="pane-scroll" id="reclist">
+      {% if groups %}
+        {% for day, rows in groups %}
+        <div class="daygroup">
+          <span class="label">{{ day }}</span>
+          {% for m in rows %}
+          <a class="rec{% if data and data.recording.id == m.id %} on{% endif %}"
+             href="/meetings/{{ m.id }}"
+             data-status="{{ 'running' if m.status in ('queued','transcribing') else m.status }}"
+             data-title="{{ m.title|lower }}">
+            <div class="rec-top">
+              <span class="rec-title">{{ m.title }}</span>
+              <span class="rec-dur">{{ m.duration_ms|hms }}</span>
+            </div>
+            <div class="rec-meta">
+              <span class="pill {{ m.status }}"><i class="dot"></i>{{ m.status|upper }}</span>
+              <span>{{ (m.recorded_at or m.created_at)|clock }}</span>
+              {% if m.open_actions %}<span>· {{ m.open_actions }} open</span>{% endif %}
+            </div>
+          </a>
+          {% endfor %}
+        </div>
+        {% endfor %}
+      {% else %}
+        <div class="empty"><div class="cell"></div>
+          <p>Meetings appear here once you drop an audio file.</p></div>
+      {% endif %}
+      <p class="empty" id="nomatch" hidden>Nothing matches that.</p>
+    </div>
+  </aside>
+
+  <section class="detail" id="detail">
+    {% if data %}
+      {% include "_meeting.html" %}
+    {% else %}
+      <div class="detail-inner">
+        {% if pipeline != 'gemini' %}
+        <div class="banner warn">
+          <span class="label">Stub pipeline</span>
+          <p>Transcripts are placeholder text. Set <span class="mono">ENYGMA_PIPELINE=gemini</span>
+             and a key to use the real one.</p>
+        </div>
+        {% endif %}
+
+        <label class="drop" id="drop">
+          <input type="file" id="file" multiple accept="audio/*,.mp3,.wav,.m4a,.aac,.ogg,.flac,.aiff,.aif">
+          <div class="cells">
+            <i class="void"></i><i></i><i></i><i></i>
+            <i></i><i></i><i class="void"></i><i></i>
+            <i></i><i class="void"></i><i></i><i></i>
+            <i></i><i></i><i></i><i class="void"></i>
+          </div>
+          <h2>Drop audio here</h2>
+          <p class="sub">mp3, wav, m4a, aac, ogg, flac or aiff. Up to {{ max_mb }} MB each.
+             The same file twice is one meeting.</p>
+        </label>
+        <div class="queue" id="queue"></div>
+
+        {% if meetings %}
+        <p class="empty">Pick a meeting on the left to read it.</p>
+        {% endif %}
+      </div>
+    {% endif %}
+  </section>
+
+</div>
+{% endblock %}

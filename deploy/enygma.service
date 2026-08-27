@@ -1,0 +1,32 @@
+# Runs on: spark-4d80. Install to /etc/systemd/system/enygma.service
+# The ceiling exists so a leak on one side cannot pressure the other.
+[Unit]
+Description=ENYGMA
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=enygma
+Group=enygma
+WorkingDirectory=/home/enygma/app
+EnvironmentFile=/home/enygma/app/.env
+ExecStart=/home/enygma/app/run.sh
+Restart=on-failure
+RestartSec=5
+
+MemoryMax=8G
+TasksMax=512
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/enygma/app/data /home/enygma/app/uploads
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+
+[Install]
+WantedBy=multi-user.target

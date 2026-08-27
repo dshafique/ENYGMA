@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Settings — ENYGMA{% endblock %}
+{% block main %}
+<header class="topbar"><div class="grow"><h1>Settings</h1>
+  <p class="sub">This device and this instance</p></div></header>
+
+<div class="page measure">
+  <div class="card" style="margin-bottom:var(--space-16)">
+    <div class="card-head"><h2>Devices</h2><span class="label">Passkeys</span></div>
+    {% if devices %}
+      {% for dv in devices %}
+      <div class="row">
+        <div><div>{{ dv.device_name }}</div>
+          <div class="where label">added {{ dv.created_at|ago }}</div></div>
+        <button class="btn ghost sm danger" data-revoke="{{ dv.id }}">Revoke</button>
+      </div>
+      {% endfor %}
+    {% else %}
+      <p class="dim">No device enrolled.</p>
+    {% endif %}
+    <button class="btn line sm" id="addkey" style="align-self:flex-start">Add this device</button>
+  </div>
+
+  <div class="card" style="margin-bottom:var(--space-16)">
+    <div class="card-head"><h2>Pipeline</h2>
+      <span class="pill {{ 'ready' if pipeline == 'gemini' else 'queued' }}">
+        <i class="dot"></i>{{ pipeline|upper }}</span></div>
+    <p class="dim" style="font-size:14px">
+      {% if pipeline == 'gemini' %}Transcripts come from {{ model }}.
+      {% else %}Transcripts are placeholder text produced without a network call.
+        Set <span class="mono">ENYGMA_PIPELINE=gemini</span> and a key to switch.{% endif %}
+    </p>
+  </div>
+
+  <div class="card">
+    <div class="card-head"><h2>Session</h2></div>
+    <button class="btn line sm" id="lock" style="align-self:flex-start">Lock ENYGMA</button>
+    <p class="label">Build {{ version }}</p>
+  </div>
+</div>
+{% endblock %}

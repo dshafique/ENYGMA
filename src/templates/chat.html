@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% import "_icons.html" as i %}
+{% block title %}Chat — ENYGMA{% endblock %}
+{% block main %}
+<div class="chatwrap{% if current %} at-convo{% endif %}">
+
+  <aside class="threads">
+    <div class="pane-head">
+      <div class="spread" style="justify-content:space-between">
+        <div><h1 style="font-size:26px;line-height:32px">Chat</h1>
+          <p class="sub">{{ threads|length }} thread{{ '' if threads|length == 1 else 's' }}</p></div>
+      </div>
+      <form method="post" action="/chat/new">
+        <button class="btn line sm" style="width:100%">{{ i.icon('plus') }} New</button>
+      </form>
+    </div>
+    <div class="pane-scroll">
+      {% for t in threads %}
+      <a class="thread-link{% if current and current.thread.id == t.id %} on{% endif %}"
+         href="/chat/{{ t.id }}">
+        <div class="t">{{ t.title }}</div>
+        <div class="p">{{ t.last_body or 'Nothing said yet' }}</div>
+      </a>
+      {% else %}
+      <p class="empty">No threads yet.</p>
+      {% endfor %}
+    </div>
+  </aside>
+
+  <section class="convo">
+    {% if current %}
+      <header class="topbar">
+        <div class="grow">
+          <a class="btn ghost sm" id="backtothreads" href="/chat">{{ i.icon('back') }} Threads</a>
+          <h2 style="margin-top:var(--space-4)">{{ current.thread.title }}</h2>
+          {% if current.thread.recording_id %}
+          <p class="sub">from <a href="/meetings/{{ current.thread.recording_id }}">a meeting</a></p>
+          {% endif %}
+        </div>
+      </header>
+      <div class="convo-scroll" id="convo">
+        {% for m in current.messages %}
+        <div class="turn {{ m.role }}">
+          <div class="who"><span class="label">{{ 'You' if m.role == 'operator' else 'ENYGMA' }}</span></div>
+          <div class="bubble">{{ m.body }}</div>
+        </div>
+        {% else %}
+        <div class="empty"><div class="cell"></div>
+          <p>Ask anything. What you ask is what ENYGMA learns about how you work.</p></div>
+        {% endfor %}
+      </div>
+      <div class="composer">
+        <form method="post" action="/chat/{{ current.thread.id }}/say" id="say">
+          <textarea name="body" id="body" rows="1" placeholder="Ask ENYGMA" required></textarea>
+          <button class="btn" type="submit" aria-label="Send">{{ i.icon('send') }}</button>
+        </form>
+      </div>
+    {% else %}
+      <div class="page">
+        <div class="empty"><div class="cell"></div>
+          <h2>Chat is the place, ENYGMA is the who</h2>
+          <p>Start a thread, or hold a word in any transcript and choose
+             <span class="mono">Learn more</span> — the term arrives here as the
+             first question and the conversation carries on.</p>
+        </div>
+      </div>
+    {% endif %}
+  </section>
+
+</div>
+{% endblock %}

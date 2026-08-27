@@ -1,0 +1,19 @@
+# Secrets and operator data. Never in the repo.
+.env
+data/
+uploads/
+
+# Build artifacts: derived from the commit that produced them, so committing
+# them would mean the number changes the number.
+VERSION
+MARK
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Editors
+.DS_Store
+*.swp
