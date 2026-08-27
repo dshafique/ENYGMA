@@ -130,7 +130,7 @@ section.no-break { page-break-inside: avoid; }
 }
 .mark i { background: currentColor; border-radius: 0.123em; }
 .mark i.void { background: transparent; }
-.mark.sm { font-size: 15px; }
+.mark.sm { font-size: 32px; }
 
 /* ──────────── COVER ──────────── */
 .cover {
@@ -184,8 +184,8 @@ section.no-break { page-break-inside: avoid; }
 .part-divider .label::before {
   content: ''; width: 0.5in; height: 1px; background: var(--d-rule-strong);
 }
+.part-divider > div:nth-child(2) { align-self: center; }
 .part-divider h1 {
-  align-self: center;
   font-size: 40pt; font-weight: 600; letter-spacing: -0.015em;
   color: var(--d-accent); line-height: 1.05;
 }
@@ -376,7 +376,7 @@ ol.toc-list li.ch .num {
     <div class="cover-bot">
       <div>Author<strong>ARKHM</strong></div>
       <div>Operator<strong>Yahya</strong></div>
-      <div>Edition<strong>Mk II.5</strong></div>
+      <div>Edition<strong>Mk II.7</strong></div>
       <div>Date<strong>2026-08-27</strong></div>
     </div>
   </div>
@@ -387,7 +387,7 @@ ol.toc-list li.ch .num {
   <h1 class="chapter">Colophon</h1>
   <div class="chapter-meta">
     <span class="label">Front matter</span>
-    <span>Mk II.5 / 2026-08-27</span>
+    <span>Mk II.7 / 2026-08-27</span>
   </div>
 
   <p class="lede">
@@ -408,7 +408,7 @@ ol.toc-list li.ch .num {
   <dl class="specs">
     <dt>Author</dt><dd>ARKHM</dd>
     <dt>Volume</dt><dd>I, Operation</dd>
-    <dt>Edition</dt><dd>Mk II.5 | 2026-08-27</dd>
+    <dt>Edition</dt><dd>Mk II.7 | 2026-08-27</dd>
     <dt>Host</dt><dd><code>spark-4d80</code>, Ubuntu, Python 3.12</dd>
     <dt>Address</dt><dd><code>https://enygma.arkhm.io</code></dd>
     <dt>Repository</dt><dd><code>github.com/dshafique/ENYGMA</code></dd>
@@ -477,7 +477,7 @@ ol.toc-list li.ch .num {
   <h1 class="chapter">Table of Contents</h1>
   <div class="chapter-meta">
     <span class="label">Front matter</span>
-    <span>Mk II.5 / 2026-08-27</span>
+    <span>Mk II.7 / 2026-08-27</span>
   </div>
 
   <ol class="toc-list">
@@ -1042,7 +1042,7 @@ ol.toc-list li.ch .num {
   </p>
   <pre class="term"><code><span class="prompt">$</span> sudo bash deploy/install-on-spark.sh
 <span class="out">==&gt; checks
-    healthz: {"ok":true,"app":"enygma","port":4073,"version":"5.2026.08.27.0526"}
+    healthz: {"ok":true,"app":"enygma","port":4073,"version":"7.2026.08.27.0553"}
     no other account can read the database, the audio or the secret</span></code></pre>
 
   <div class="callout scar">
@@ -1086,7 +1086,7 @@ ol.toc-list li.ch .num {
     <tr><td><code>argon2-cffi</code></td><td>23.1.0</td><td>Argon2id for the PIN, setup codes and recovery codes. Deliberately slow.</td></tr>
     <tr><td><code>httpx</code></td><td>0.28.1</td><td>HTTP client, and the test client's transport.</td></tr>
     <tr><td><code>google-genai</code></td><td>2.20.0</td><td>The Gemini backend. Transcription and summarisation.</td></tr>
-    <tr><td><code>pytest</code></td><td>8.3.4</td><td>83 tests. The installer runs them before it restarts the service.</td></tr>
+    <tr><td><code>pytest</code></td><td>8.3.4</td><td>90 tests. The installer runs them before it restarts the service.</td></tr>
   </table>
 
   <div class="callout scar">
@@ -1240,7 +1240,7 @@ cloudflared on spark-4d80
   <pre class="term"><code><span class="prompt">$</span> git clone https://github.com/dshafique/ENYGMA.git ~/enygma-release
 <span class="prompt">$</span> cd ~/enygma-release
 <span class="prompt">$</span> python3 tools/stamp_release.py
-<span class="out">Mk II.5   build 5.2026.08.27.0526</span></code></pre>
+<span class="out">Mk II.7   build 7.2026.08.27.0553</span></code></pre>
   <p>
     <code>stamp_release.py</code> writes <code>VERSION</code> and
     <code>MARK</code> from the commit count. Both are build artifacts and are not
@@ -1296,19 +1296,19 @@ cloudflared on spark-4d80
   </p>
 
   <h2>What a correct install looks like</h2>
-  <pre class="term"><code><span class="out">==&gt; release 5.2026.08.27.0526  (from /home/arkhm/enygma-release)
-    replacing build 4.2026.08.27.0519
+  <pre class="term"><code><span class="out">==&gt; release 7.2026.08.27.0553  (from /home/arkhm/enygma-release)
+    replacing build 6.2026.08.27.0546
     python3 3.12
 ==&gt; code into /home/enygma/app
 ==&gt; migrations and tests, as enygma
-    applied 005_pairing.sql
+    applied 007_… (none pending)
 ok: 52 tokens defined, every var() reference resolves
 No problems found.
 83 passed in 4.9s
 ==&gt; systemd
     8589934592 memory ceiling in force
 ==&gt; checks
-    healthz: {"ok":true,...,"mark":"Mk II.5"}
+    healthz: {"ok":true,...,"mark":"Mk II.7"}
     no other account can read the database, the audio or the secret</span></code></pre>
   <p>
     If the token count, the test count or the mark differ from what you expect,
@@ -1382,7 +1382,7 @@ ENYGMA_GEMINI_API_KEY=AIza...</code></pre>
   <pre class="term"><code><span class="prompt">$</span> systemctl is-active enygma
 <span class="out">active</span>
 <span class="prompt">$</span> curl -s https://enygma.arkhm.io/healthz
-<span class="out">{"ok":true,"app":"enygma","port":4073,"version":"5.2026.08.27.0526","mark":"Mk II.5"}</span></code></pre>
+<span class="out">{"ok":true,"app":"enygma","port":4073,"version":"7.2026.08.27.0553","mark":"Mk II.7"}</span></code></pre>
   <p>
     <code>/healthz</code> is the only route that needs no session. The
     <code>mark</code> it returns is the one thing to check after any deployment:
@@ -1527,7 +1527,7 @@ ENYGMA_GEMINI_API_KEY=AIza...</code></pre>
 
   <h2>Verifying, from outside</h2>
   <pre class="term"><code><span class="prompt">$</span> curl -s https://enygma.arkhm.io/healthz
-<span class="out">{"ok":true,...,"mark":"Mk II.5"}</span>
+<span class="out">{"ok":true,...,"mark":"Mk II.7"}</span>
 <span class="prompt">$</span> curl -s -o /dev/null -w "%{http_code}\n" https://arkhm.io/
 <span class="out">200</span></code></pre>
   <p>
@@ -2270,7 +2270,7 @@ restored enygma-20260827-045126.db.gz
 │   ├── dns-record.sh          read-only; prints the record required
 │   └── disk-ceiling.sh        quota if possible, hourly alarm otherwise
 │
-├── tests/                     87 tests
+├── tests/                     90 tests
 └── docs/manual/               this document</code></pre>
 </section>
 
@@ -2314,6 +2314,10 @@ restored enygma-20260827-045126.db.gz
         <td>Constrained JSON decoding, a raised output ceiling, and a salvage parser that keeps every segment that arrived.</td></tr>
     <tr><td>A recording is marked <code>transcribing</code> before work starts. A crash in that gap left it there forever, showing a progress bar that could never finish.</td>
         <td><code>requeue_stuck()</code> at startup returns them to the queue with a note.</td></tr>
+    <tr><td>A long transcript was requested as one JSON document, so a response cut off at the end discarded the whole meeting.</td>
+        <td>The model is constrained by a JSON schema, the output ceiling is raised, and a salvage parser keeps every segment that arrived.</td></tr>
+    <tr><td>The fix for that sent <code>response_mime_type</code> without its required partner and produced a fresh 400, after the audio had already been uploaded.</td>
+        <td>Optional request keys are optional: a rejection about the request's shape falls back to the minimum request. A wrong guess costs one call, not a meeting.</td></tr>
     <tr><td>The setup-code field answered every possible mistake — a typo, an expired code, a used code, a PIN — with the same sentence.</td>
         <td>A four-digit entry is named as a PIN; a wrong length says what the length should be.</td></tr>
   </table>
