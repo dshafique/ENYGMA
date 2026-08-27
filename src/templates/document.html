@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% import "_icons.html" as i %}
+{% block title %}{{ doc.title }} — ENYGMA{% endblock %}
+{% block main %}
+<div class="page measure">
+  <a class="btn ghost sm" href="/library">{{ i.icon('back') }} Library</a>
+  <h1 style="margin-top:var(--space-12)">{{ doc.title }}</h1>
+  <div class="detail-meta">
+    <span>{{ doc.kind }}</span>
+    {% if doc.source_name %}<span class="mono">{{ doc.source_name }}</span>{% endif %}
+    <span>{{ '{:,}'.format(doc.words) }} words</span>
+    <span>added {{ doc.added_at|ago }}</span>
+  </div>
+  <div class="block" style="margin-top:var(--space-24)">
+    <span class="label">Full text</span>
+    <pre class="doc">{{ doc.body }}</pre>
+  </div>
+  <button class="btn ghost sm danger" data-forget="{{ doc.id }}">Forget this document</button>
+</div>
+{% endblock %}

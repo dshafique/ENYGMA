@@ -239,14 +239,29 @@ async function send(url, init) {
 }
 
 /* ------------------------------------------------------- action items */
-$$("[data-action]").forEach((box) => box.addEventListener("change", async () => {
-  const row = box.closest(".item");
-  try {
-    const res = await post(`/actions/${box.dataset.action}/toggle`);
-    row?.classList.toggle("done", res.done);
-    box.checked = res.done;
-  } catch (e) { box.checked = !box.checked; }
-}));
+/* Four states, not a checkbox. Declining something and not having got to it are
+   different answers, and the list is only worth reading if it can tell them
+   apart. The row restyles itself immediately and reverts if the write fails. */
+$$("select.statepick").forEach((pick) => {
+  let previous = pick.dataset.state;
+  pick.addEventListener("change", async () => {
+    const row = pick.closest(".item");
+    const chosen = pick.value;
+    const paint = (state) => {
+      pick.dataset.state = state;
+      pick.closest(".statewrap")?.setAttribute("data-state", state);
+      if (row) row.className = row.className.replace(/state-\w+/, `state-${state}`);
+    };
+    paint(chosen);
+    try {
+      await post(`/actions/${pick.dataset.action}/state`, { state: chosen });
+      previous = chosen;
+    } catch (e) {
+      pick.value = previous;
+      paint(previous);
+    }
+  });
+});
 
 /* ------------------------------------------------------ speaker naming */
 $$("[data-speaker]").forEach((input) => {
@@ -430,6 +445,71 @@ $("#retry")?.addEventListener("click", async (e) => {
       say("Could not copy");
     }
   });
+}
+
+/* ----------------------------------------------------------- library */
+{
+  const drop = $("#libdrop");
+  const input = $("#libfile");
+  const queue = $("#libqueue");
+  if (drop && input) {
+    const stop = (e) => { e.preventDefault(); e.stopPropagation(); };
+    ["dragenter", "dragover"].forEach((k) =>
+      drop.addEventListener(k, (e) => { stop(e); drop.classList.add("over"); }));
+    ["dragleave", "drop"].forEach((k) =>
+      drop.addEventListener(k, (e) => { stop(e); drop.classList.remove("over"); }));
+    drop.addEventListener("drop", (e) => take(e.dataTransfer.files));
+    input.addEventListener("change", () => take(input.files));
+
+    async function take(files) {
+      if (!files || !files.length) return;
+      const body = new FormData();
+      Array.from(files).forEach((f) => body.append("files", f));
+      const line = (n, t, bad) =>
+        `<div class="q"><span>${n}</span><span class="${bad ? "danger" : "muted"}">${t}</span></div>`;
+      queue.innerHTML = Array.from(files).map((f) => line(f.name, "reading")).join("");
+      try {
+        const res = await send("/library/upload", { method: "POST", body });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          queue.innerHTML = line("Upload", `rejected (${res.status})`, true);
+          return;
+        }
+        const results = data.results || [];
+        queue.innerHTML = results.map((r) => line(
+          r.filename,
+          r.ok ? (r.duplicate ? "already in the library" : `added, ${r.chunks} passages`)
+               : r.reason,
+          !r.ok)).join("");
+        if (results.some((r) => r.ok)) setTimeout(() => location.reload(), 1100);
+      } catch (err) {
+        queue.innerHTML = line("Upload failed", String(err), true);
+      }
+    }
+  }
+
+  const noteForm = $("#notefm");
+  noteForm?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const msg = $("#notemsg");
+    try {
+      const res = await post("/library/note", {
+        title: $("#notetitle").value, body: $("#notebody").value,
+      });
+      if (msg) msg.textContent = res.duplicate ? "Already in the library" : "Added";
+      if (!res.duplicate) setTimeout(() => location.reload(), 600);
+    } catch (err) {
+      if (msg) msg.textContent = err.data?.detail || "That was not accepted";
+    }
+  });
+
+  $$("[data-forget]").forEach((b) => b.addEventListener("click", async () => {
+    b.disabled = true;
+    try {
+      await post(`/library/${b.dataset.forget}/forget`);
+      location.href = "/library";
+    } catch (e) { b.disabled = false; }
+  }));
 }
 
 /* -------------------------------------------------------------- chat */

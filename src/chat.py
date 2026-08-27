@@ -8,7 +8,7 @@ When no model is reachable the reply says so rather than inventing an answer. A
 glossary hit is still returned, because that is real knowledge the app has.
 """
 from .db import cursor
-from . import glossary
+from . import glossary, library
 from .config import config
 
 NO_MODEL = (
@@ -87,10 +87,19 @@ def _first_reply(thread_id: int) -> bool:
 
 def _answer(question: str, caveat: bool = True) -> str:
     hit = glossary.lookup(_probable_term(question))
+    found = library.context_for(question)
+
     if config.PIPELINE != "gemini":
+        # No model: say what is actually known, and from where.
+        parts = []
         if hit:
-            return f"{hit['term']} — {hit['gloss']}" + (f"\n\n{NO_MODEL}" if caveat else "")
-        return NO_MODEL if caveat else "That one is not in my glossary yet."
+            parts.append(f"{hit['term']} — {hit['gloss']}")
+        if found["sources"]:
+            parts.append("From your library:\n\n" + found["text"])
+        if caveat:
+            parts.append(NO_MODEL)
+        return "\n\n".join(parts) if parts else (
+            NO_MODEL if caveat else "That is not in my glossary or your library.")
     try:
         from .pipeline.gemini import GeminiBackend
         backend = GeminiBackend()
@@ -101,7 +110,18 @@ def _answer(question: str, caveat: bool = True) -> str:
         )
         if hit:
             prompt += f"\n\nThe app's own glossary says: {hit['gloss']}"
-        return backend._ask([{"type": "text", "text": prompt}]).strip()
+        if found["text"]:
+            prompt += (
+                "\n\nThese passages are from the operator's own library. Prefer "
+                "them over your general knowledge where they disagree, and say so "
+                "if they do not answer the question:\n\n" + found["text"]
+            )
+        answer = backend._ask([{"type": "text", "text": prompt}], schema=None).strip()
+        if found["sources"]:
+            # Which documents were drawn on, so a claim can be traced.
+            names = ", ".join(s["title"] for s in found["sources"])
+            answer += f"\n\nDrawn from your library: {names}"
+        return answer
     except Exception as exc:
         base = f"{hit['term']} — {hit['gloss']}\n\n" if hit else ""
         return base + f"I could not reach the model just now: {exc}"

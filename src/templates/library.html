@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% import "_icons.html" as i %}
+{% block title %}Library — ENYGMA{% endblock %}
+{% block main %}
+<header class="topbar">
+  <div class="grow">
+    <h1>Library</h1>
+    <p class="sub">{{ docs|length }} document{{ '' if docs|length == 1 else 's' }}
+      {%- if words %} · {{ '{:,}'.format(words) }} words ENYGMA can draw on{% endif %}</p>
+  </div>
+</header>
+
+<div class="page measure">
+
+  <label class="drop" id="libdrop">
+    <input type="file" id="libfile" multiple
+           accept=".txt,.md,.markdown,.rst,.csv,.tsv,.log,.json,.yaml,.yml,.html,.htm,.pdf,.py,.js,.sql,.sh">
+    <div class="cells">
+      <i class="void"></i><i></i><i></i><i></i>
+      <i></i><i></i><i class="void"></i><i></i>
+      <i></i><i class="void"></i><i></i><i></i>
+      <i></i><i></i><i></i><i class="void"></i>
+    </div>
+    <h2>Drop documents here</h2>
+    <p class="sub">Text, Markdown, HTML, JSON, CSV or PDF. Anything you drop is
+       searched when you ask a question in Chat.</p>
+  </label>
+  <div class="queue" id="libqueue"></div>
+
+  <div class="card" style="margin-top:var(--space-24)">
+    <div class="card-head"><h2>Write a note</h2><span class="label">Straight in</span></div>
+    <form id="notefm">
+      <input class="linefield" id="notetitle" placeholder="Title" aria-label="Note title">
+      <textarea id="notebody" rows="5" aria-label="Note"
+        placeholder="Anything worth remembering: how a system works, who owns what, a decision and why."></textarea>
+      <div class="spread" style="margin-top:var(--space-12)">
+        <button class="btn sm" type="submit">Add to library</button>
+        <span class="label" id="notemsg"></span>
+      </div>
+    </form>
+  </div>
+
+  {% if docs %}
+  <div class="block" style="margin-top:var(--space-32)">
+    <span class="label">In the library</span>
+    {% for d in docs %}
+    <div class="item">
+      <span class="txt">
+        <a href="/library/{{ d.id }}">{{ d.title }}</a>
+        <span class="where">
+          {{ d.kind }}{% if d.source_name %} · {{ d.source_name }}{% endif %}
+          · {{ '{:,}'.format(d.words) }} words · {{ d.chunks }} passage{{ '' if d.chunks == 1 else 's' }}
+          · added {{ d.added_at|ago }}</span>
+      </span>
+      <button class="btn ghost sm danger" data-forget="{{ d.id }}">Forget</button>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="empty" style="margin-top:var(--space-32)">
+    <div class="cell"></div>
+    <p>Nothing here yet. Whatever you add becomes part of what ENYGMA knows:
+       it is searched every time you ask a question in Chat, and the answer says
+       which documents it drew on.</p>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

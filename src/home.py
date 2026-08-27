@@ -30,6 +30,7 @@ def dashboard() -> dict:
             "SELECT COUNT(DISTINCT person_name) AS n FROM speakers "
             "WHERE person_name IS NOT NULL AND TRIM(person_name) <> ''").fetchone()["n"]
     open_actions = actions_repo.listing(include_done=False)["open"]
+    action_counts = actions_repo.counts()
     return {
         "counts": {k: (v or 0) for k, v in counts.items()},
         "recent": recent,
@@ -39,4 +40,5 @@ def dashboard() -> dict:
         "people": people,
         "open_actions": open_actions[:5],
         "open_action_count": len(open_actions),
+        "action_counts": action_counts,
     }

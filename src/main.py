@@ -22,7 +22,7 @@ from .auth import session, passkeys, attempts, secrets_store
 from .ingest import poller, upload
 from .pipeline import runner
 from .export import as_markdown
-from . import (meetings as meetings_repo, actions as actions_repo,
+from . import (library, meetings as meetings_repo, actions as actions_repo,
                directory as directory_repo, chat as chat_repo, glossary,
                home as home_repo, fmt)
 
@@ -46,6 +46,11 @@ templates.env.filters.update(fmt.FILTERS)
 # stylesheet cannot serve it against this markup.
 templates.env.globals["build"] = config.VERSION
 templates.env.globals["mark_label"] = config.MARK
+# Every page that renders an action needs the same set of states, in the same
+# order, spelled the same way.
+templates.env.globals["states"] = [
+    (key, actions_repo.STATE_LABELS[key]) for key in actions_repo.STATES
+]
 
 
 
@@ -416,13 +421,94 @@ async def meeting_speaker(recording_id: int, request: Request):
 
 @app.post("/actions/{action_id}/toggle")
 def action_toggle(action_id: int, request: Request):
+    """Kept for anything still calling it: open becomes done, done becomes open."""
     require_session(request)
     with cursor() as conn:
-        conn.execute(
-            "UPDATE action_items SET done_at = CASE WHEN done_at IS NULL "
-            "THEN datetime('now') ELSE NULL END WHERE id = ?", (action_id,))
-        row = conn.execute("SELECT done_at FROM action_items WHERE id = ?", (action_id,)).fetchone()
-    return {"done": bool(row and row["done_at"])}
+        row = conn.execute("SELECT state FROM action_items WHERE id = ?",
+                           (action_id,)).fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail="No such action")
+    new = "open" if (row["state"] or "open") == "done" else "done"
+    actions_repo.set_state(action_id, new)
+    return {"state": new, "done": new == "done"}
+
+
+@app.post("/actions/{action_id}/state")
+async def action_state(action_id: int, request: Request):
+    require_session(request)
+    body = await request.json()
+    try:
+        result = actions_repo.set_state(action_id, str(body.get("state", "")),
+                                        body.get("note"))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    if not result:
+        raise HTTPException(status_code=404, detail="No such action")
+    return result
+
+
+# --------------------------------------------------------------------------
+# the library
+# --------------------------------------------------------------------------
+@app.get("/library", response_class=HTMLResponse)
+def library_page(request: Request):
+    if current(request) is None:
+        return RedirectResponse("/lock", status_code=302)
+    return page(request, "library.html", "library",
+                {"docs": library.listing(), "words": library.total_words()})
+
+
+@app.get("/library/{document_id}", response_class=HTMLResponse)
+def document_page(document_id: int, request: Request):
+    if current(request) is None:
+        return RedirectResponse("/lock", status_code=302)
+    doc = library.get(document_id)
+    if doc is None:
+        raise HTTPException(status_code=404, detail="No such document")
+    return page(request, "document.html", "library", {"doc": doc})
+
+
+@app.post("/library/note")
+async def library_note(request: Request):
+    require_session(request)
+    body = await request.json()
+    try:
+        return library.add(body.get("title", ""), body.get("body", ""))
+    except library.Rejected as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.post("/library/upload")
+async def library_upload(request: Request, files: list[UploadFile] = File(...)):
+    require_session(request)
+    results = []
+    for item in files:
+        try:
+            raw = await item.read()
+            text = library.extract(item.filename, raw)
+            added = library.add(Path(item.filename).stem.replace("_", " "), text,
+                                kind="file", source_name=Path(item.filename).name,
+                                mime=item.content_type, raw=raw)
+            results.append({"filename": item.filename, "ok": True, **added})
+        except library.Rejected as exc:
+            results.append({"filename": item.filename, "ok": False, "reason": str(exc)})
+        finally:
+            await item.close()
+    return {"results": results}
+
+
+@app.post("/library/{document_id}/forget")
+def library_forget(document_id: int, request: Request):
+    require_session(request)
+    if not library.remove(document_id):
+        raise HTTPException(status_code=404, detail="No such document")
+    return {"ok": True}
+
+
+@app.get("/api/library/search")
+def library_search(q: str, request: Request):
+    require_view(request)
+    return library.context_for(q)
 
 
 # --------------------------------------------------------------------------

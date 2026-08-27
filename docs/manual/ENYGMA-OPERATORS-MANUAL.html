@@ -788,6 +788,8 @@ ol.toc-list li.ch .num {
         <td>Every commitment across every meeting, open and done, each linking back to the moment it was said.</td></tr>
     <tr><td><strong>Directory</strong></td><td>Who is this person?</td>
         <td>Everyone who has spoken, and the meetings they appeared in. A person exists because a speaker label was given a name.</td></tr>
+    <tr><td><strong>Library</strong></td><td>What does ENYGMA know that was already true?</td>
+        <td>Documents and notes. A meeting records something that happened; a document is context that existed before it. Everything here is searched when a question is asked in Chat.</td></tr>
   </table>
 
   <p>
@@ -804,6 +806,25 @@ ol.toc-list li.ch .num {
     addressed by SHA-256, so the same recording dropped twice is one meeting
     whatever it was called the second time. That is the only deduplication rule:
     exact, never fuzzy, never guessing that two files are "probably" the same.
+  </p>
+
+  <h2>Action items have four states</h2>
+  <p>
+    A checkbox can only say finished or not finished, which makes everything
+    consciously turned down look identical to everything nobody has got to yet. A
+    list that cannot tell those apart stops being read.
+  </p>
+  <table>
+    <tr><th>State</th><th>Means</th></tr>
+    <tr><td><strong>Open</strong></td><td>Owed, and nothing has happened yet. The default.</td></tr>
+    <tr><td><strong>Pending</strong></td><td>Waiting on somebody or something else. Not his move.</td></tr>
+    <tr><td><strong>Done</strong></td><td>Finished.</td></tr>
+    <tr><td><strong>Rejected</strong></td><td>Turned down on purpose. It stays on the list, struck through, with the reason if one was given.</td></tr>
+  </table>
+  <p>
+    Only <strong>open</strong> counts as something owed: it is what Home shows and
+    what the count in the meeting list means. Rejected items are kept rather than
+    deleted, because "we decided not to" is a fact worth being able to find later.
   </p>
 
   <h2>What it produces</h2>
@@ -832,7 +853,24 @@ ol.toc-list li.ch .num {
     of the operator's field and grows by use.
   </p>
 
-  <h3>4. A copy, on demand</h3>
+  <h3>4. Answers drawn on his own material</h3>
+  <p>
+    The Library holds documents and notes: a spec, a runbook, an onboarding note,
+    a paper somebody sent. Every question asked in Chat searches it first, and the
+    answer names which documents it drew on so a claim can be traced back.
+  </p>
+  <p>
+    Retrieval is SQLite's own full-text index with stemming, not vector
+    embeddings. For one person with tens of documents that finds the right
+    passage, costs nothing per query, needs no API key, keeps working when the
+    model is unreachable, and can be reasoned about when it returns the wrong
+    thing. A passage has to share more than one distinctive word with the
+    question, or one word that is rare across the whole library — otherwise
+    nothing is returned at all, because a coincidence presented as a source is
+    the confident wrongness this system exists to refuse.
+  </p>
+
+  <h3>5. A copy, on demand</h3>
   <p>
     <em>Copy as Markdown</em> puts the whole meeting on the clipboard: title,
     date, who was present, abstract, decisions and questions with their
@@ -2190,6 +2228,7 @@ restored enygma-20260827-045126.db.gz
     <tr><td><code>ENYGMA_GEMINI_API_KEY</code></td><td><em>required for gemini</em></td><td>Its own key, in its own project, on the paid tier.</td></tr>
     <tr><td><code>ENYGMA_GEMINI_MODEL</code></td><td><code>gemini-3.5-flash</code></td><td>Switching models is this line and a restart.</td></tr>
     <tr><td><code>ENYGMA_MAX_OUTPUT_TOKENS</code></td><td><code>65536</code></td><td>Output ceiling. Too low truncates long transcripts.</td></tr>
+    <tr><td><code>ENYGMA_MAX_UPLOAD_MB</code></td><td><code>500</code></td><td>Per-file limit for audio, checked before a byte is written.</td></tr>
     <tr><td><code>ENYGMA_CHUNK_MINUTES</code></td><td><code>25</code></td><td>Window length for long audio. Must stay under the thirty minute diarization limit.</td></tr>
     <tr><td><code>ENYGMA_CHUNK_OVERLAP_SECONDS</code></td><td><code>90</code></td><td>How much speech two windows share. This is what carries speaker identity across a join.</td></tr>
     <tr><td><code>ENYGMA_MAX_UPLOAD_MB</code></td><td><code>500</code></td><td>Per-file limit, checked before a byte is written.</td></tr>
@@ -2267,6 +2306,7 @@ restored enygma-20260827-045126.db.gz
 │   ├── fmt.py                 timestamps: stored UTC, shown local
 │   ├── meetings.py            the read layer for recordings
 │   ├── home.py  actions.py  directory.py  chat.py  glossary.py
+│   ├── library.py             documents, passages, retrieval
 │   ├── export.py              one meeting as Markdown
 │   │
 │   ├── migrations/            forever-additive, applied in filename order
@@ -2365,6 +2405,10 @@ restored enygma-20260827-045126.db.gz
         <td>Optional request keys are optional: a rejection about the request's shape falls back to the minimum request. A wrong guess costs one call, not a meeting.</td></tr>
     <tr><td>Everything after the thirty minute mark of a meeting was attributed to one speaker. Nothing errored; the transcript simply became wrong halfway through and still looked complete.</td>
         <td>Diarization is a documented thirty minute feature. Long audio is cut into overlapping windows, each diarized inside the limit, and speaker identity is carried across the joins by matching the speech the windows share.</td></tr>
+    <tr><td>A trigger body contains semicolons, and the migration runner split statements on them. The trigger arrived in pieces, each failing as "incomplete input" — an error that says nothing about triggers.</td>
+        <td>The splitter rejoins fragments while a <code>BEGIN</code> is still open.</td></tr>
+    <tr><td>Library search matched a question about swallows to a document about message brokers, because both contain "what" and "the".</td>
+        <td>Stopwords are removed, and a passage must share two distinctive words with the question or one that is rare across the library. Otherwise nothing is returned.</td></tr>
     <tr><td>The setup-code field answered every possible mistake — a typo, an expired code, a used code, a PIN — with the same sentence.</td>
         <td>A four-digit entry is named as a PIN; a wrong length says what the length should be.</td></tr>
   </table>

@@ -14,7 +14,7 @@ from src import db, config as cfg                # noqa: E402
 from src.auth import session                     # noqa: E402
 from src.ingest import upload                    # noqa: E402
 
-PAGES = ["/", "/meetings", "/chat", "/actions", "/directory", "/settings"]
+PAGES = ["/", "/meetings", "/chat", "/actions", "/directory", "/library", "/settings"]
 
 
 def setup_module(_):
@@ -56,7 +56,7 @@ def test_every_tab_redirects_to_the_lock_screen_without_a_session():
 def test_the_nav_marks_the_current_destination_in_every_nav_that_holds_it():
     c = client()
     # The five tabs appear in the rail and in the handset tab bar.
-    for path in ["/", "/meetings", "/chat", "/actions", "/directory"]:
+    for path in ["/", "/meetings", "/chat", "/actions", "/directory", "/library"]:
         assert c.get(path).text.count('aria-current="page"') == 2, path
     # Settings is not a tab. It appears in the rail and in the handset header.
     assert c.get("/settings").text.count('aria-current="page"') == 2
@@ -625,3 +625,137 @@ def test_a_four_digit_entry_in_the_setup_code_box_is_named_as_a_pin():
     assert "That is a PIN, not a setup code" in page
     assert "eight letters and numbers" in page
     assert "It is not your PIN." in page
+
+
+# ------------------------------------------------------------------- library
+def test_a_note_becomes_something_chat_can_find():
+    from src import library
+    library.add("Halcyon MQTT spec", (
+        "The broker is configured with retained messages enabled on every sensor "
+        "topic. On restart it replays the last retained value to any client that "
+        "subscribes. This is intentional and is not a fault."))
+    found = library.context_for("what happens to retained messages on restart?")
+    assert found["sources"] and found["sources"][0]["title"] == "Halcyon MQTT spec"
+    assert "replays the last retained value" in found["text"]
+
+
+def test_an_unrelated_question_finds_nothing_rather_than_the_nearest_thing():
+    """A coincidence presented as a source is exactly the confident wrongness
+    this system refuses. Without a stopword list, a question about swallows
+    matches a document about brokers because both contain 'what' and 'the'."""
+    from src import library
+    assert library.context_for("what is the airspeed velocity of a swallow?")["sources"] == []
+    assert library.context_for("what should I have for lunch")["sources"] == []
+
+
+def test_the_same_document_twice_is_one_document():
+    from src import library
+    body = "A runbook nobody reads until the night it matters."
+    first = library.add("Runbook", body)
+    again = library.add("Runbook copied", body)
+    assert again["duplicate"] is True and again["id"] == first["id"]
+
+
+def test_a_file_type_it_cannot_read_says_so_in_a_sentence():
+    from src import library
+    try:
+        library.extract("slides.pptx", b"\x50\x4b\x03\x04junk")
+        raise AssertionError("should have been refused")
+    except library.Rejected as exc:
+        assert "paste" in str(exc), "the refusal must offer the way round it"
+
+
+def test_html_is_read_as_text_not_as_tags():
+    from src import library
+    text = library.extract("page.html", b"<html><style>p{color:red}</style>"
+                                        b"<body><h1>Onboarding</h1>"
+                                        b"<p>Standups are Tuesdays at 9.</p></body></html>")
+    assert "Standups are Tuesdays at 9." in text
+    assert "<" not in text and "color:red" not in text
+
+
+def test_uploading_and_forgetting_a_document_over_http():
+    c = client()
+    res = c.post("/library/upload",
+                 files={"files": ("gateway.md", b"# Gateway\n\nTwo gateways run "
+                                                b"behind a shared subscription so "
+                                                b"either can take the traffic.",
+                                  "text/markdown")})
+    assert res.status_code == 200
+    added = res.json()["results"][0]
+    assert added["ok"] and added["chunks"] >= 1
+
+    page = c.get("/library").text
+    assert "gateway" in page.lower()
+
+    from src import library
+    assert library.context_for("what happens if a gateway is lost")["sources"]
+
+    assert c.post(f"/library/{added['id']}/forget").status_code == 200
+    assert library.context_for("what happens if a gateway is lost")["sources"] == []
+
+
+def test_the_library_needs_a_fresh_session_to_write_and_a_session_to_read():
+    assert client(signed_in=False).get("/library").status_code == 302
+    assert _stale_client().get("/library").status_code == 200, "reading stays open"
+    assert _stale_client().post("/library/note",
+                                json={"title": "x", "body": "y"}).status_code == 401
+
+
+# ------------------------------------------------------------ action states
+def test_an_action_can_be_rejected_without_pretending_it_was_done():
+    """Declining something and not having got to it are different answers."""
+    import importlib
+    from src import actions as repo
+    from src.db import cursor
+    seed = importlib.import_module("tools.seed_demo")
+    seed.seed()
+    with cursor() as conn:
+        ids = [r["id"] for r in conn.execute("SELECT id FROM action_items ORDER BY id")]
+
+    repo.set_state(ids[0], "rejected", "Halcyon are doing it instead")
+    repo.set_state(ids[1], "pending")
+    repo.set_state(ids[2], "done")
+
+    grouped = repo.listing()
+    assert ids[0] in [a["id"] for a in grouped["rejected"]]
+    assert ids[1] in [a["id"] for a in grouped["pending"]]
+    assert ids[2] in [a["id"] for a in grouped["done"]]
+    rejected = next(a for a in grouped["rejected"] if a["id"] == ids[0])
+    assert rejected["state_note"] == "Halcyon are doing it instead"
+    assert rejected["done_at"] is None, "rejected is not done"
+    assert next(a for a in grouped["done"] if a["id"] == ids[2])["done_at"]
+
+    # Only open items are what he still owes.
+    assert repo.open_count() == repo.counts()["open"]
+    assert ids[0] not in [a["id"] for a in repo.listing(include_done=False)["open"]]
+    seed.clear()
+
+
+def test_an_unknown_state_is_refused_rather_than_stored():
+    from src import actions as repo
+    from src.db import cursor
+    with cursor() as conn:
+        conn.execute("INSERT INTO recordings (title,status,source,sha256) "
+                     "VALUES ('m','ready','upload','statesha')")
+        rid = conn.execute("SELECT last_insert_rowid() AS id").fetchone()["id"]
+        conn.execute("INSERT INTO action_items (recording_id, text) VALUES (?, 'x')", (rid,))
+        aid = conn.execute("SELECT last_insert_rowid() AS id").fetchone()["id"]
+    try:
+        repo.set_state(aid, "maybe")
+        raise AssertionError("should have been refused")
+    except ValueError as exc:
+        assert "maybe" in str(exc)
+    assert client().post(f"/actions/{aid}/state", json={"state": "maybe"}).status_code == 400
+    assert client().post(f"/actions/{aid}/state", json={"state": "pending"}).status_code == 200
+    with cursor() as conn:
+        conn.execute("DELETE FROM recordings WHERE id = ?", (rid,))
+
+
+def test_every_page_that_shows_an_action_offers_the_same_four_states():
+    c = client()
+    for path in ("/", "/actions"):
+        text = c.get(path).text
+        assert 'class="statepick"' in text or "No recordings" in text or "Nothing" in text
+    from src import actions as repo
+    assert repo.STATES == ("open", "pending", "done", "rejected")

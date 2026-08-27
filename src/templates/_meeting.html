@@ -120,13 +120,20 @@
   <div class="tab measure" id="tab-actions">
     {% if data.actions %}
       {% for a in data.actions %}
-      <label class="item{{ ' done' if a.done_at }}">
-        <input type="checkbox" data-action="{{ a.id }}" {{ 'checked' if a.done_at }}>
-        <span class="txt">{{ a.text }}
+      <div class="item state-{{ a.state or 'open' }}">
+        <span class="txt"><span class="what">{{ a.text }}</span>
           <span class="where">{{ a.owner or 'unassigned' }}{% if a.due_date %} · due {{ a.due_date }}{% endif %}</span>
         </span>
         {% if a.at_ms is not none %}<button class="stamp" data-seek="{{ a.at_ms }}">{{ a.at_ms|mmss }}</button>{% endif %}
-      </label>
+        <span class="statewrap" data-state="{{ a.state or 'open' }}">
+          <select class="statepick" data-action="{{ a.id }}" data-state="{{ a.state or 'open' }}"
+                          aria-label="State of: {{ a.text }}">
+          {% for key, label in states %}
+          <option value="{{ key }}" {{ 'selected' if (a.state or 'open') == key }}>{{ label }}</option>
+          {% endfor %}
+          </select>
+        </span>
+      </div>
       {% endfor %}
     {% else %}
       <div class="empty"><div class="cell"></div>

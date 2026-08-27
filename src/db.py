@@ -4,6 +4,7 @@ The runner applies every .sql file in migrations/ in filename order, once, insid
 transaction, and records it. Applying twice is a no-op. It verifies the artifact
 rather than trusting the report: after running it re-reads schema_migrations.
 """
+import re
 import sqlite3
 from contextlib import contextmanager
 
@@ -54,9 +55,36 @@ def _strip_comments(sql: str) -> str:
     return "\n".join(out)
 
 
+_BEGIN = re.compile(r"\bBEGIN\b", re.I)
+_END = re.compile(r"\bEND\b", re.I)
+
+
 def _statements(sql: str) -> list[str]:
-    """Split a migration into statements, dropping empty fragments."""
-    return [chunk.strip() for chunk in _strip_comments(sql).split(";") if chunk.strip()]
+    """Split a migration into statements.
+
+    A semicolon does not always end a statement. A trigger body is a sequence of
+    statements wrapped in BEGIN ... END, and every one of them is followed by a
+    semicolon of its own. Splitting naively cuts the trigger into pieces, each of
+    which fails as "incomplete input" -- an error that says nothing about
+    triggers and sends you looking at the wrong line.
+
+    So: split on semicolons, then rejoin while a BEGIN is still open.
+    """
+    out: list[str] = []
+    buffer = ""
+    depth = 0
+    for chunk in _strip_comments(sql).split(";"):
+        buffer = f"{buffer};{chunk}" if buffer else chunk
+        depth += len(_BEGIN.findall(chunk)) - len(_END.findall(chunk))
+        if depth > 0:
+            continue                      # still inside a trigger body
+        if buffer.strip():
+            out.append(buffer.strip())
+        buffer = ""
+        depth = 0
+    if buffer.strip():
+        out.append(buffer.strip())
+    return out
 
 
 def migrate(verbose: bool = False) -> list[str]:
