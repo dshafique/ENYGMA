@@ -23,6 +23,7 @@ from pathlib import Path
 
 from ..config import config
 from .base import Backend, Segment, Transcript, Summary
+from . import chunking, stitch
 
 TRANSCRIBE_PROMPT = """Transcribe this meeting recording in full.
 
@@ -248,6 +249,58 @@ class GeminiBackend(Backend):
             return client.interactions.create(**minimum).output_text
 
     def transcribe(self, audio_path, mime: str) -> Transcript:
+        """Whole, or in windows if the recording outruns the diarization limit."""
+        path = Path(audio_path)
+        total = chunking.duration_ms(path)
+        limit = config.CHUNK_MINUTES * 60_000
+
+        if total is None or total <= limit or not chunking.have_ffmpeg():
+            transcript = self._transcribe_one(path, mime)
+            if total and total > limit and not chunking.have_ffmpeg():
+                transcript.note = (
+                    f"This recording is {total // 60000} minutes long. Speaker "
+                    "attribution is only reliable for the first 25, and ffmpeg is "
+                    "not installed on this host so it could not be split. Install "
+                    "ffmpeg and run it again for correct speakers throughout."
+                )
+            return transcript
+
+        return self._transcribe_windowed(path, mime, total)
+
+    def _transcribe_windowed(self, path: Path, mime: str, total: int) -> Transcript:
+        pieces: list[tuple[int, list[Segment]]] = []
+        model = self.model
+        with chunking.workspace() as tmp:
+            windows = chunking.split(path, total, Path(tmp))
+            for window in windows:
+                part = self._transcribe_one(window.path, mime)
+                model = part.model or model
+                # Each window thinks it starts at zero. Move it to real time.
+                shifted = [
+                    Segment(
+                        speaker_label=s.speaker_label,
+                        start_ms=None if s.start_ms is None else s.start_ms + window.offset_ms,
+                        end_ms=None if s.end_ms is None else s.end_ms + window.offset_ms,
+                        text=s.text,
+                    )
+                    for s in part.segments
+                ]
+                pieces.append((window.offset_ms, shifted))
+
+        segments = stitch.join(pieces, config.CHUNK_OVERLAP_SECONDS * 1000)
+        if not segments:
+            raise RuntimeError("No window of this recording produced any transcript.")
+        speakers = len({s.speaker_label for s in segments})
+        return Transcript(
+            segments=segments,
+            model=model,
+            note=(f"Transcribed in {len(pieces)} overlapping windows, because "
+                  f"speaker attribution is only supported up to "
+                  f"{config.CHUNK_MINUTES} minutes at a time. {speakers} distinct "
+                  "speakers were carried across the joins; check the names once."),
+        )
+
+    def _transcribe_one(self, audio_path, mime: str) -> Transcript:
         path = Path(audio_path)
         client = self._get_client()
         size = path.stat().st_size

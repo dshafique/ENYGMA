@@ -939,6 +939,10 @@ ol.toc-list li.ch .num {
     <li><strong>Claim.</strong> The worker takes one queued recording inside a
       <code>BEGIN IMMEDIATE</code> transaction and marks it
       <code>transcribing</code>, so two claims can never race.</li>
+    <li><strong>Window, if it is long.</strong> Speaker attribution is only
+      supported up to thirty minutes of audio. Anything longer is cut into
+      overlapping windows with <code>ffmpeg</code> and each is transcribed on its
+      own; see Chapter 17.</li>
     <li><strong>Transcribe.</strong> Under 20&nbsp;MB the audio goes inline as
       base64; above that it is uploaded via the Files API and referenced by URI.
       The model returns JSON segments with speaker, start, end and text.</li>
@@ -2034,13 +2038,48 @@ restored enygma-20260827-045126.db.gz
     it never ran. Fix it with <code>check_env.py</code>.
   </div>
 
-  <h2>Long meetings</h2>
+  <h2>Long meetings, and the thirty minute wall</h2>
   <p>
-    The model's output ceiling bounds how long a single transcript can be. A very
-    long recording can exhaust it; the salvage path recovers what arrived and the
-    meeting carries a note saying how far it reached. Raise
-    <code>ENYGMA_MAX_OUTPUT_TOKENS</code> if this happens routinely, and consider
-    splitting recordings longer than about ninety minutes.
+    The platform supports speaker attribution for <strong>up to thirty minutes of
+    audio</strong>. Beyond that it does not error: it stops distinguishing voices
+    and keeps emitting whichever label it used last. A fifty minute meeting comes
+    back correctly attributed for half an hour and then as one uninterrupted
+    monologue, and nothing about the result says so.
+  </p>
+  <p>
+    ENYGMA therefore cuts anything longer into overlapping windows, transcribes
+    each inside the limit, and stitches the results. The windows are
+    <code>ENYGMA_CHUNK_MINUTES</code> long, twenty-five by default so as not to sit
+    on the boundary, overlapping by <code>ENYGMA_CHUNK_OVERLAP_SECONDS</code>.
+  </p>
+  <p>
+    Each window is diarized independently, so its <code>SPEAKER 1</code> has
+    nothing to do with the previous window's. The overlap is what makes them
+    reconcilable: the same speech is transcribed twice, once at the end of one
+    window and again at the start of the next, and matching that repeated speech
+    gives a mapping between the two label sets. Matching is on words rather than
+    timings, because the two windows disagree about what time it is. A voice that
+    only appears in the later window gets a new number rather than a guessed one.
+  </p>
+  <div class="callout warn">
+    <span class="label">Warning</span>
+    This needs <code>ffmpeg</code> on the host. Without it a long recording is
+    still transcribed, in one piece, and carries a note saying attribution past
+    the limit is not trustworthy. <code>check_env.py</code> reports whether it is
+    installed.
+  </div>
+  <p>
+    To see how attribution actually behaved on a given recording:
+  </p>
+  <pre class="term"><code><span class="prompt">$</span> sudo -u enygma sh -c "cd /home/enygma/app &amp;&amp; \
+    .venv/bin/python tools/inspect_transcript.py 12"
+<span class="out">  window          segs  distinct  distribution
+   25-30  min       16         3  SPEAKER 1×5  SPEAKER 2×6  SPEAKER 3×5
+   30-35  min       16         1  SPEAKER 1×16   &lt;-- one voice only</span></code></pre>
+  <p>
+    The output ceiling is a separate limit on how long a single transcript can be.
+    The salvage path recovers what arrived and the meeting says how far it
+    reached; raise <code>ENYGMA_MAX_OUTPUT_TOKENS</code> if it happens routinely.
   </p>
 </section>
 
@@ -2077,6 +2116,9 @@ restored enygma-20260827-045126.db.gz
     <li><strong>Re-authentication.</strong> Verified by driving a genuinely stale session in a browser.</li>
     <li><strong>The worker's failure path.</strong> Verified with a backend that throws.</li>
     <li><strong>Truncation salvage.</strong> Verified against the exact response that failed.</li>
+    <li><strong>Windowing long audio.</strong> Verified with real ffmpeg cuts on a
+      52 minute file, and end to end against a model that collapses exactly the way
+      the real one does.</li>
     <li><strong>The service worker's discretion.</strong> Verified by reading the cache after loading a meeting.</li>
   </ul>
 
@@ -2093,8 +2135,9 @@ restored enygma-20260827-045126.db.gz
   <ul>
     <li><strong>Transcript accuracy</strong> has not been compared against a
       reference transcript of the same audio.</li>
-    <li><strong>Long recordings</strong> — the practical duration ceiling has not
-      been established, only that one exists.</li>
+    <li><strong>Stitched speaker identity across windows</strong> has been proven
+      on synthetic audio end to end, but not yet measured on a real recording with
+      real voices at a real join.</li>
     <li><strong>Off-machine backup</strong> does not exist. Disk failure is total
       loss.</li>
     <li><strong>The consent conversation</strong> about recording an employer's
@@ -2147,6 +2190,8 @@ restored enygma-20260827-045126.db.gz
     <tr><td><code>ENYGMA_GEMINI_API_KEY</code></td><td><em>required for gemini</em></td><td>Its own key, in its own project, on the paid tier.</td></tr>
     <tr><td><code>ENYGMA_GEMINI_MODEL</code></td><td><code>gemini-3.5-flash</code></td><td>Switching models is this line and a restart.</td></tr>
     <tr><td><code>ENYGMA_MAX_OUTPUT_TOKENS</code></td><td><code>65536</code></td><td>Output ceiling. Too low truncates long transcripts.</td></tr>
+    <tr><td><code>ENYGMA_CHUNK_MINUTES</code></td><td><code>25</code></td><td>Window length for long audio. Must stay under the thirty minute diarization limit.</td></tr>
+    <tr><td><code>ENYGMA_CHUNK_OVERLAP_SECONDS</code></td><td><code>90</code></td><td>How much speech two windows share. This is what carries speaker identity across a join.</td></tr>
     <tr><td><code>ENYGMA_MAX_UPLOAD_MB</code></td><td><code>500</code></td><td>Per-file limit, checked before a byte is written.</td></tr>
     <tr><td><code>ENYGMA_WORKER_POLL_SECONDS</code></td><td><code>3</code></td><td>How long an idle worker waits before looking again.</td></tr>
     <tr><td><code>ENYGMA_HINOTES_ENABLED</code></td><td><code>0</code></td><td>The recorder poller. Gated off; audio arrives by drag and drop.</td></tr>
@@ -2318,6 +2363,8 @@ restored enygma-20260827-045126.db.gz
         <td>The model is constrained by a JSON schema, the output ceiling is raised, and a salvage parser keeps every segment that arrived.</td></tr>
     <tr><td>The fix for that sent <code>response_mime_type</code> without its required partner and produced a fresh 400, after the audio had already been uploaded.</td>
         <td>Optional request keys are optional: a rejection about the request's shape falls back to the minimum request. A wrong guess costs one call, not a meeting.</td></tr>
+    <tr><td>Everything after the thirty minute mark of a meeting was attributed to one speaker. Nothing errored; the transcript simply became wrong halfway through and still looked complete.</td>
+        <td>Diarization is a documented thirty minute feature. Long audio is cut into overlapping windows, each diarized inside the limit, and speaker identity is carried across the joins by matching the speech the windows share.</td></tr>
     <tr><td>The setup-code field answered every possible mistake — a typo, an expired code, a used code, a PIN — with the same sentence.</td>
         <td>A four-digit entry is named as a PIN; a wrong length says what the length should be.</td></tr>
   </table>

@@ -46,6 +46,15 @@ esac
 note "python3 $PYV"
 $PY -c 'import venv' 2>/dev/null || die "python3-venv is missing. apt install python3-venv"
 
+# Not fatal, but a recording over the diarization limit comes back attributed to
+# one voice and looks fine, which is the worst way for a dependency to be absent.
+if command -v ffmpeg >/dev/null && command -v ffprobe >/dev/null; then
+  note "ffmpeg $(ffmpeg -version 2>/dev/null | head -1 | cut -d' ' -f3)"
+else
+  note "WARNING: ffmpeg is missing. Recordings over ${ENYGMA_CHUNK_MINUTES:-25} minutes"
+  note "         will lose speaker attribution partway through. apt install ffmpeg"
+fi
+
 # --- port ------------------------------------------------------------------
 # PHNTM holds 4063. If something already answers on our port, stop rather than
 # fight it: two apps on one port is exactly the coupling this design avoids.

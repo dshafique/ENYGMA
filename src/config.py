@@ -93,6 +93,13 @@ class Config:
     # an hour of speech gets cut off mid-token, which fails as a JSON error and
     # looks like the model malfunctioning.
     MAX_OUTPUT_TOKENS = int(os.environ.get("ENYGMA_MAX_OUTPUT_TOKENS", "65536"))
+
+    # Diarization is supported up to thirty minutes of audio. Past that the model
+    # stops distinguishing voices and keeps using whichever label it had last, so
+    # anything longer is transcribed in overlapping windows and stitched back
+    # together. Twenty-five leaves room rather than sitting on the boundary.
+    CHUNK_MINUTES = int(os.environ.get("ENYGMA_CHUNK_MINUTES", "25"))
+    CHUNK_OVERLAP_SECONDS = int(os.environ.get("ENYGMA_CHUNK_OVERLAP_SECONDS", "90"))
     WORKER_POLL_SECONDS = float(os.environ.get("ENYGMA_WORKER_POLL_SECONDS", "3"))
 
     # HiNotes. The base URL is not in the handoff; lift it from PHNTM's

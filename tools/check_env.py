@@ -99,6 +99,16 @@ def main() -> int:
     elif pipeline != "gemini":
         print(f"\nPipeline is '{pipeline}'. Transcripts are placeholder text, not real ones.")
 
+    import shutil as _sh
+    if _sh.which("ffmpeg") and _sh.which("ffprobe"):
+        print("\nffmpeg is present. Recordings longer than the diarization limit")
+        print("will be transcribed in windows so speakers survive to the end.")
+    else:
+        problems += 1
+        print("\nffmpeg is NOT installed. Speaker attribution silently collapses to")
+        print("one voice after about 30 minutes and long recordings cannot be split.")
+        print("Fix with:  sudo apt install ffmpeg")
+
     if mode != "600":
         problems += 1
         print(f"\n.env is mode {mode}. It holds the session secret and the API key.")

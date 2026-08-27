@@ -330,3 +330,170 @@ def test_a_real_failure_is_not_retried_and_not_swallowed():
     except RuntimeError as exc:
         assert "429" in str(exc)
     assert len(calls) == 1, "a rate limit must not be retried"
+
+
+# ---------------------------------------------------- long audio and speakers
+def test_windows_cover_the_whole_recording_and_overlap():
+    from src.pipeline.chunking import plan
+    from src.config import config
+    window = config.CHUNK_MINUTES * 60_000
+    overlap = config.CHUNK_OVERLAP_SECONDS * 1000
+
+    assert plan(10 * 60_000) == [(0, 10 * 60_000)], "short audio is not split"
+
+    total = 52 * 60_000
+    windows = plan(total)
+    assert len(windows) >= 3
+    assert windows[0][0] == 0
+    assert windows[-1][0] + windows[-1][1] == total, "the end must be covered"
+    for (a_off, a_len), (b_off, _b_len) in zip(windows, windows[1:]):
+        assert b_off < a_off + a_len, "consecutive windows must overlap"
+        assert (a_off + a_len) - b_off >= overlap - 1, "overlap must be big enough to match on"
+        assert a_len <= window, "no window may exceed the diarization limit"
+
+
+def test_labels_are_carried_across_a_join_by_matching_the_repeated_speech():
+    """Each window is diarized independently, so window 2's SPEAKER 1 is a
+    different person from window 1's. The overlap is what identifies them."""
+    from src.pipeline.base import Segment
+    from src.pipeline.stitch import join
+
+    first = [
+        Segment("SPEAKER 1", 0, 10_000, "Let us start with where the quarter landed."),
+        Segment("SPEAKER 2", 10_000, 20_000, "Revenue came in four percent under forecast."),
+        Segment("SPEAKER 1", 20_000, 30_000, "And the integration timeline with Halcyon."),
+        Segment("SPEAKER 2", 30_000, 40_000, "Their staging does not support webhook retries."),
+    ]
+    # The second window heard the same last two turns, but numbered the voices
+    # the other way round.
+    second = [
+        Segment("SPEAKER 2", 20_000, 30_000, "And the integration timeline with Halcyon."),
+        Segment("SPEAKER 1", 30_000, 40_000, "Their staging does not support webhook retries."),
+        Segment("SPEAKER 1", 40_000, 50_000, "So we move the date and say so in writing."),
+        Segment("SPEAKER 2", 50_000, 60_000, "Agreed. I will send the revised scope."),
+    ]
+
+    merged = join([(0, first), (20_000, second)], overlap_ms=20_000)
+    times = [s.start_ms for s in merged]
+    assert times == sorted(times) and len(times) == len(set(times)), "no duplicated speech"
+    by_time = {s.start_ms: s.speaker_label for s in merged}
+    assert by_time[40_000] == "SPEAKER 2", "the mapping must survive the join"
+    assert by_time[50_000] == "SPEAKER 1"
+    assert len({s.speaker_label for s in merged}) == 2, "two voices, not four"
+
+
+def test_a_voice_only_in_the_later_window_becomes_a_new_speaker_not_a_wrong_one():
+    from src.pipeline.base import Segment
+    from src.pipeline.stitch import join
+    first = [
+        Segment("SPEAKER 1", 0, 10_000, "Opening remarks about the schedule."),
+        Segment("SPEAKER 2", 10_000, 20_000, "A question about the reporting module."),
+    ]
+    second = [
+        Segment("SPEAKER 1", 10_000, 20_000, "A question about the reporting module."),
+        Segment("SPEAKER 2", 20_000, 30_000, "Someone who had not spoken until now."),
+    ]
+    merged = join([(0, first), (10_000, second)], overlap_ms=10_000)
+    labels = [s.speaker_label for s in merged]
+    assert labels[:2] == ["SPEAKER 1", "SPEAKER 2"]
+    assert labels[2] not in ("SPEAKER 1", "SPEAKER 2"), "a third voice is a third label"
+
+
+def test_a_long_recording_without_ffmpeg_says_so_instead_of_lying():
+    """The collapse is silent: the transcript looks complete and is simply wrong
+    after the limit. If it cannot be split, that has to be said out loud."""
+    import pathlib, tempfile, json
+    from src.pipeline import chunking, gemini
+
+    audio = pathlib.Path(tempfile.mkdtemp()) / "long.mp3"
+    audio.write_bytes(b"ID3" + b"\x09" * 512)
+
+    class Fake:
+        class files:
+            @staticmethod
+            def upload(file): raise AssertionError("inline expected")
+        class interactions:
+            @staticmethod
+            def create(**kw):
+                class R: output_text = json.dumps({"segments": [
+                    {"speaker": "SPEAKER 1", "start": "00:00", "end": "00:05", "text": "hi"}]})
+                return R()
+
+    real_duration, real_have = chunking.duration_ms, chunking.have_ffmpeg
+    chunking.duration_ms = lambda p: 52 * 60_000
+    chunking.have_ffmpeg = lambda: False
+    try:
+        out = gemini.GeminiBackend(client=Fake()).transcribe(audio, "audio/mpeg")
+    finally:
+        chunking.duration_ms, chunking.have_ffmpeg = real_duration, real_have
+
+    assert out.note and "ffmpeg" in out.note
+    assert "52 minutes" in out.note
+
+
+def test_end_to_end_windowing_prevents_the_collapse(tmp_path):
+    """The whole path, with real ffmpeg cuts and a model that behaves the way the
+    real one does: correct speakers inside the limit, one label past it.
+
+    Without windowing this recording comes back as a monologue after the limit.
+    With it, both voices survive to the end.
+    """
+    import json, shutil, subprocess, pytest
+    if not shutil.which("ffmpeg") or not shutil.which("ffprobe"):
+        pytest.skip("ffmpeg not available on this host")
+
+    from src.config import config
+    from src.pipeline import gemini, chunking
+
+    audio = tmp_path / "long.mp3"
+    subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi",
+                    "-i", "sine=frequency=440:duration=60",
+                    "-c:a", "libmp3lame", "-b:a", "32k", str(audio)], check=True)
+
+    LIMIT_S = 20                      # pretend diarization dies after 20 seconds
+
+    from src.pipeline.chunking import plan
+    old_min, old_ovl = config.CHUNK_MINUTES, config.CHUNK_OVERLAP_SECONDS
+    config.CHUNK_MINUTES = 0.25       # 15 second windows
+    config.CHUNK_OVERLAP_SECONDS = 5
+    windows = plan(60_000)
+    assert len(windows) > 1, "the recording must actually be split for this test"
+    pending = [length for _offset, length in windows]
+
+    class Collapsing:
+        """Transcribes exactly the audio it is handed, diarizing correctly for the
+        first LIMIT_S of it and then emitting a single label -- which is the
+        behaviour observed on the real thing. Each window starts its own clock at
+        zero, as the real model does."""
+        class files:
+            @staticmethod
+            def upload(file): raise AssertionError("inline expected")
+        class interactions:
+            @staticmethod
+            def create(**kw):
+                length_s = pending.pop(0) // 1000
+                segs, t, turn = [], 0, 0
+                while t < length_s:
+                    speaker = f"SPEAKER {turn % 2 + 1}" if t < LIMIT_S else "SPEAKER 1"
+                    segs.append({"speaker": speaker,
+                                 "start": f"{t // 60:02d}:{t % 60:02d}",
+                                 "end": f"{min(t + 5, length_s) // 60:02d}:"
+                                        f"{min(t + 5, length_s) % 60:02d}",
+                                 "text": f"Utterance {turn} of this window."})
+                    t += 5
+                    turn += 1
+                class R: output_text = json.dumps({"segments": segs})
+                return R()
+
+    try:
+        out = gemini.GeminiBackend(client=Collapsing()).transcribe(audio, "audio/mpeg")
+    finally:
+        config.CHUNK_MINUTES, config.CHUNK_OVERLAP_SECONDS = old_min, old_ovl
+
+    assert out.note and "windows" in out.note
+    late = [s for s in out.segments if (s.start_ms or 0) > 30_000]
+    assert late, "the tail of the recording must be present"
+    assert len({s.speaker_label for s in late}) > 1, \
+        "attribution collapsed to one speaker despite windowing"
+    times = [s.start_ms for s in out.segments]
+    assert times == sorted(times), "segments must come out in order"
