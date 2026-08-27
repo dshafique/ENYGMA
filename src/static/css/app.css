@@ -454,6 +454,41 @@ h3 { font-size: 15px; font-weight: 600; margin: 0; }
 }
 
 /* ======================================================================
+   Re-auth sheet
+   ====================================================================== */
+.sheet-scrim {
+  position: fixed; inset: 0; z-index: 80;
+  display: grid; place-items: end center;
+  /* A partial sheet does not get the full 48px scrim. At that strength the page
+     behind it stops being readable, and the point of this sheet is that he can
+     still see what he was doing. */
+  background: var(--scrim-partial);
+  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+}
+.sheet-scrim[hidden] { display: none; }
+.sheet {
+  width: min(420px, calc(100vw - var(--space-32)));
+  margin-bottom: max(var(--space-48), env(safe-area-inset-bottom));
+  background-color: var(--surface);
+  background-image: linear-gradient(var(--glass-fill), var(--glass-fill));
+  border: 1px solid var(--border-rest); border-radius: var(--radius-xl);
+  box-shadow: var(--glass-shadow); padding: var(--space-32) var(--space-24) var(--space-24);
+  display: flex; flex-direction: column; align-items: center; gap: var(--space-12);
+  text-align: center;
+}
+.sheet .ico { width: 28px; height: 28px; color: var(--text-dim); }
+.sheet p { margin: 0; max-width: 34ch; font-size: 14px; }
+.sheet .btn { width: 100%; }
+.sheet #reauth-pinbox { display: flex; gap: var(--space-8); width: 100%; }
+.sheet #reauth-pinbox[hidden] { display: none; }
+.pinfield {
+  flex: 1; height: 44px; text-align: center; letter-spacing: .4em; font-size: 17px;
+  border-radius: var(--radius-sm); border: 1px solid var(--border-rest);
+  background: var(--surface-low); color: var(--text);
+}
+@media (min-width: 900px) { .sheet-scrim { place-items: center; } .sheet { margin-bottom: 0; } }
+
+/* ======================================================================
    Term popover
    ====================================================================== */
 .termable { cursor: text; }

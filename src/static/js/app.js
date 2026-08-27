@@ -3,21 +3,107 @@
 
 /* This file was requested as app.js?v=<build>. Anything it imports carries the
    same stamp, so a dynamic import can never pull a cached copy from an older
-   build than the one that asked for it. */
-const V = new URL(import.meta.url).search;
+   build than the one that asked for it: see V, declared with the re-auth
+   helpers below. */
 
 const $  = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
 
-async function post(url, body) {
-  const res = await fetch(url, {
+/* ---------------------------------------------------------------------------
+   Re-authentication.
+
+   Reading needs a session; writing needs a *fresh* one. When the freshness
+   window lapses, every write comes back 401 with reason "stale". Without this,
+   an upload simply did nothing: the response was parsed as if it were a result
+   list, the list was empty, and the interface reported success by saying
+   nothing at all. Silence is the worst possible answer to "did that work".
+
+   So: one wrapper around every mutating request. On a stale 401 it raises the
+   sheet, waits for a passkey or a PIN, and retries the original request once.
+   His place is kept, and the thing he asked for still happens.
+--------------------------------------------------------------------------- */
+const V = new URL(import.meta.url).search;
+
+function reauth() {
+  const scrim = $("#reauth");
+  if (!scrim) return Promise.reject(new Error("no re-auth sheet on this page"));
+  const msg = $("#reauth-msg");
+  const say = (t, bad) => { if (msg) { msg.textContent = t || "";
+                                       msg.className = "msg " + (bad ? "danger" : "dim"); } };
+
+  return new Promise((resolve, reject) => {
+    const close = (ok, err) => {
+      scrim.hidden = true;
+      $("#reauth-pinbox").hidden = true;
+      $("#reauth-pinval").value = "";
+      say("");
+      document.removeEventListener("keydown", onKey);
+      ok ? resolve() : reject(err || new Error("cancelled"));
+    };
+    const onKey = (e) => { if (e.key === "Escape") close(false); };
+
+    $("#reauth-go").onclick = async () => {
+      try {
+        const { unlock } = await import(`/static/js/passkey.js${V}`);
+        await unlock(say);
+        close(true);
+      } catch (e) {
+        say(e?.status === 429
+          ? `Locked for ${e.data?.detail?.lockout ?? "a few"} seconds`
+          : "That did not complete. Try again.", true);
+      }
+    };
+    $("#reauth-pin").onclick = () => { $("#reauth-pinbox").hidden = false; $("#reauth-pinval").focus(); };
+    $("#reauth-pingo").onclick = async () => {
+      try {
+        await post("/auth/pin/verify", { pin: $("#reauth-pinval").value }, { guard: false });
+        close(true);
+      } catch (e) { say("That PIN did not match", true); }
+    };
+    $("#reauth-pinval").onkeydown = (e) => { if (e.key === "Enter") $("#reauth-pingo").click(); };
+    $("#reauth-cancel").onclick = () => close(false);
+    document.addEventListener("keydown", onKey);
+
+    scrim.hidden = false;
+    $("#reauth-go").focus();
+  });
+}
+
+function stale(res, data) {
+  return res.status === 401 && (data?.detail?.reason ?? data?.reason) === "stale";
+}
+
+async function post(url, body, opts = {}) {
+  const send = () => fetch(url, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body || {}),
   });
-  const data = await res.json().catch(() => ({}));
+  let res = await send();
+  let data = await res.json().catch(() => ({}));
+  if (!res.ok && opts.guard !== false && stale(res, data)) {
+    await reauth();
+    res = await send();
+    data = await res.json().catch(() => ({}));
+  }
+  if (res.status === 401 && !stale(res, data)) { location.href = "/lock"; return {}; }
   if (!res.ok) throw Object.assign(new Error("request failed"), { status: res.status, data });
   return data;
+}
+
+/* Same contract, for requests that are not JSON. */
+async function send(url, init) {
+  let res = await fetch(url, init);
+  if (res.status === 401) {
+    const data = await res.clone().json().catch(() => ({}));
+    if (stale(res, data)) {
+      await reauth();
+      res = await fetch(url, init);
+    } else {
+      location.href = "/lock";
+    }
+  }
+  return res;
 }
 
 /* ---------------------------------------------------------------- theme */
@@ -82,26 +168,38 @@ async function post(url, body) {
       drop.addEventListener(k, (e) => { stop(e); drop.classList.add("over"); }));
     ["dragleave", "drop"].forEach((k) =>
       drop.addEventListener(k, (e) => { stop(e); drop.classList.remove("over"); }));
-    drop.addEventListener("drop", (e) => send(e.dataTransfer.files));
-    input.addEventListener("change", () => send(input.files));
+    drop.addEventListener("drop", (e) => upload(e.dataTransfer.files));
+    input.addEventListener("change", () => upload(input.files));
 
-    async function send(files) {
+    async function upload(files) {
       if (!files || !files.length) return;
       const body = new FormData();
       Array.from(files).forEach((f) => body.append("files", f));
-      queue.innerHTML = Array.from(files)
-        .map((f) => `<div class="q"><span>${f.name}</span><span class="muted">sending</span></div>`)
-        .join("");
+      const line = (name, text, bad) =>
+        `<div class="q"><span>${name}</span><span class="${bad ? "danger" : "muted"}">${text}</span></div>`;
+      queue.innerHTML = Array.from(files).map((f) => line(f.name, "sending")).join("");
       try {
-        const res = await fetch("/upload", { method: "POST", body });
-        const data = await res.json();
-        queue.innerHTML = (data.results || [])
-          .map((r) => `<div class="q"><span>${r.filename}</span><span class="${r.ok ? "muted" : "danger"}">${
-            r.ok ? (r.duplicate ? "already here" : "queued") : r.reason}</span></div>`)
-          .join("");
-        if ((data.results || []).some((r) => r.ok)) setTimeout(() => location.reload(), 900);
+        const res = await send("/upload", { method: "POST", body });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          // The failure that started this: a 401 was parsed as an empty result
+          // list and the interface said nothing at all.
+          queue.innerHTML = Array.from(files)
+            .map((f) => line(f.name, `rejected (${res.status})`, true)).join("");
+          return;
+        }
+        const results = data.results || [];
+        if (!results.length) {
+          queue.innerHTML = line("Upload", "the server accepted nothing", true);
+          return;
+        }
+        queue.innerHTML = results.map((r) => line(
+          r.filename,
+          r.ok ? (r.duplicate ? "already here" : "queued") : r.reason,
+          !r.ok)).join("");
+        if (results.some((r) => r.ok)) setTimeout(() => location.reload(), 900);
       } catch (err) {
-        queue.innerHTML = `<div class="q"><span>Upload failed</span><span class="danger">${err}</span></div>`;
+        queue.innerHTML = line("Upload failed", String(err), true);
       }
     }
   }
@@ -310,7 +408,7 @@ $("#retry")?.addEventListener("click", async (e) => {
     const say = (t) => { if (note) { note.textContent = t;
                          setTimeout(() => (note.textContent = ""), 2600); } };
     try {
-      const res = await fetch(`/meetings/${button.dataset.id}/markdown`);
+      const res = await send(`/meetings/${button.dataset.id}/markdown`);
       if (!res.ok) throw new Error(res.status);
       const text = await res.text();
       // navigator.clipboard needs a secure context. Over plain http on a LAN
@@ -346,6 +444,18 @@ $("#retry")?.addEventListener("click", async (e) => {
   });
   body?.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); form?.requestSubmit(); }
+  });
+  // Submitted through fetch rather than as a form post, so a stale session
+  // raises the sheet instead of bouncing him to the lock screen and throwing
+  // away what he had typed.
+  form?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const text = body.value.trim();
+    if (!text) return;
+    const data = new FormData();
+    data.append("body", text);
+    const res = await send(form.action, { method: "POST", body: data });
+    if (res.ok) location.reload();
   });
 }
 

@@ -47,7 +47,11 @@ class Config:
     RP_NAME = os.environ.get("ENYGMA_RP_NAME", "ENYGMA")
     ORIGIN = os.environ.get("ENYGMA_ORIGIN", "https://enygma.arkhm.io")
 
-    REAUTH_MINUTES = int(os.environ.get("ENYGMA_REAUTH_MINUTES", "5"))
+    # Minutes before a state-changing request needs the passkey again. Five was
+    # chosen when there was no way to re-authenticate without locking the whole
+    # app; now that the sheet exists and keeps his place, thirty is the humane
+    # number and still bounds the unattended-device window.
+    REAUTH_MINUTES = int(os.environ.get("ENYGMA_REAUTH_MINUTES", "30"))
     INSECURE_COOKIES = os.environ.get("ENYGMA_INSECURE_COOKIES", "0") == "1"
 
     # Five failures across passkey and PIN combined, then thirty seconds.

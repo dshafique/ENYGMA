@@ -326,3 +326,81 @@ def test_copy_as_markdown_carries_the_timestamps_out_with_it():
 
 def test_the_markdown_route_needs_a_session():
     assert client(signed_in=False).get("/meetings/1/markdown").status_code in (302, 401, 404)
+
+
+# ---------------------------------------------------------------- freshness
+def _stale_client():
+    """A session that is real but old: signed correctly, verified long ago."""
+    import time
+    from src.main import app
+    c = TestClient(app, follow_redirects=False)
+    old = time.time() - (cfg.config.REAUTH_MINUTES + 5) * 60
+    c.cookies.set(session.cookie_name(), session.issue(verified_at=old))
+    return c
+
+
+def test_a_stale_session_can_still_read_every_page():
+    """Going stale must not eject him. He keeps reading; only writes stop."""
+    c = _stale_client()
+    for path in PAGES:
+        assert c.get(path).status_code == 200, f"{path} rejected a stale session"
+
+
+def test_a_stale_session_can_still_read_what_the_page_already_shows():
+    """Being able to see a summary but not copy it is a distinction with nothing
+    behind it. Same for holding a word in a transcript he is already reading."""
+    import importlib
+    from src.db import cursor
+    seed = importlib.import_module("tools.seed_demo")
+    seed.seed()
+    with cursor() as conn:
+        rid = conn.execute("SELECT id FROM recordings WHERE source='demo' "
+                           "AND status='ready' ORDER BY id").fetchone()["id"]
+    c = _stale_client()
+    assert c.get(f"/meetings/{rid}/markdown").status_code == 200
+    assert c.get("/api/term?q=MQTT").status_code == 200
+    assert c.get("/api/meetings").status_code == 200
+    seed.clear()
+
+
+def test_a_stale_session_is_refused_for_writes_and_says_which_kind_of_401():
+    """This is the bug: upload came back 401 and the interface said nothing.
+    The reason has to be machine-readable so the client can raise the sheet
+    rather than bounce him to the lock screen."""
+    c = _stale_client()
+    r = c.post("/upload", files={"files": ("m.mp3", b"ID3" + b"\x11" * 4000, "audio/mpeg")})
+    assert r.status_code == 401
+    assert r.json()["detail"]["reason"] == "stale"
+
+
+def test_no_session_at_all_is_a_different_401_than_a_stale_one():
+    r = client(signed_in=False).post("/upload",
+                                     files={"files": ("m.mp3", b"ID3", "audio/mpeg")})
+    assert r.status_code == 401
+    assert r.json()["detail"]["reason"] == "locked"
+
+
+def test_re_authenticating_makes_the_same_upload_succeed():
+    """The whole point of the sheet: retry the thing he actually asked for."""
+    c = _stale_client()
+    payload = {"files": ("Board sync.mp3", b"ID3" + b"\x44" * 6000, "audio/mpeg")}
+    assert c.post("/upload", files=payload).status_code == 401
+
+    # What the sheet does: prove it is him, which reissues a fresh cookie.
+    from src.auth import secrets_store
+    secrets_store.set_pin("135790")
+    ok = c.post("/auth/pin/verify", json={"pin": "135790"})
+    assert ok.status_code == 200
+
+    retried = c.post("/upload", files={"files": ("Board sync.mp3",
+                                                 b"ID3" + b"\x44" * 6000, "audio/mpeg")})
+    assert retried.status_code == 200
+    assert retried.json()["results"][0]["ok"] is True
+
+
+def test_the_sheet_is_present_on_every_page_that_can_write():
+    c = client()
+    for path in PAGES:
+        text = c.get(path).text
+        assert 'id="reauth"' in text, f"{path} has no re-auth sheet"
+        assert 'id="reauth-pin"' in text, "the PIN fallback must be offered too"

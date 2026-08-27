@@ -65,6 +65,25 @@
 
 <main class="main">{% block main %}{% endblock %}</main>
 
+<div class="sheet-scrim" id="reauth" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="reauth-title">
+    {{ i.icon('lock') }}
+    <h2 id="reauth-title">Confirm it is you</h2>
+    <p class="dim">You have been idle a while. This one action needs your passkey.
+       Nothing you were doing is lost.</p>
+    <p class="msg dim" id="reauth-msg"></p>
+    <button class="btn" id="reauth-go">Use passkey</button>
+    <button class="btn ghost" id="reauth-pin">Use PIN instead</button>
+    <div id="reauth-pinbox" hidden>
+      <input class="pinfield mono" id="reauth-pinval" type="password"
+             inputmode="numeric" autocomplete="one-time-code" placeholder="PIN"
+             aria-label="PIN">
+      <button class="btn" id="reauth-pingo">Unlock</button>
+    </div>
+    <button class="btn ghost" id="reauth-cancel">Cancel</button>
+  </div>
+</div>
+
 <nav class="tabbar" aria-label="Sections">
   {% for key, href, label in tabs %}
   <a href="{{ href }}" class="tab-item{% if nav == key %} on{% endif %}"

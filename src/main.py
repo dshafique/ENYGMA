@@ -59,7 +59,9 @@ def current(request: Request) -> dict | None:
 
 
 def require_session(request: Request) -> dict:
-    """Two different 401s, two different screens.
+    """A fresh session. For anything that changes state.
+
+    Two different 401s, two different screens.
 
     reason=locked   -> the lock screen
     reason=stale    -> the compact re-auth sheet, so his place is kept
@@ -69,6 +71,20 @@ def require_session(request: Request) -> dict:
         raise HTTPException(status_code=401, detail={"reason": "locked"})
     if not state["fresh"]:
         raise HTTPException(status_code=401, detail={"reason": "stale"})
+    return state
+
+
+def require_view(request: Request) -> dict:
+    """A session, fresh or not. For reading what the page is already showing.
+
+    The line is: reading something already on screen needs a session; changing
+    state needs a recent one. Holding a word in a transcript should not fail
+    because he read the page five minutes ago, and being able to see a summary
+    but not copy it is a distinction with no meaning behind it.
+    """
+    state = current(request)
+    if state is None:
+        raise HTTPException(status_code=401, detail={"reason": "locked"})
     return state
 
 
@@ -210,7 +226,7 @@ def logout():
 # --------------------------------------------------------------------------
 @app.get("/auth/devices")
 def devices(request: Request):
-    require_session(request)
+    require_view(request)
     return {"devices": passkeys.enrolled_devices()}
 
 
@@ -229,7 +245,7 @@ def revoke(device_id: int, request: Request):
 # --------------------------------------------------------------------------
 @app.get("/ingest/status")
 def ingest_status(request: Request):
-    require_session(request)
+    require_view(request)
     return poller.status()
 
 
@@ -262,7 +278,7 @@ def meetings_page(request: Request):
 
 @app.get("/api/meetings")
 def meetings_api(request: Request):
-    require_session(request)
+    require_view(request)
     return {"meetings": meetings_repo.listing()}
 
 
@@ -295,7 +311,7 @@ def meeting_page(recording_id: int, request: Request):
 @app.get("/meetings/{recording_id}/markdown")
 def meeting_markdown(recording_id: int, request: Request):
     """The escape hatch. One meeting, readable anywhere, timestamps intact."""
-    require_session(request)
+    require_view(request)
     data = meetings_repo.detail(recording_id)
     if data is None:
         raise HTTPException(status_code=404, detail="No such recording")
@@ -304,7 +320,7 @@ def meeting_markdown(recording_id: int, request: Request):
 
 @app.get("/meetings/{recording_id}/audio")
 def meeting_audio(recording_id: int, request: Request):
-    require_session(request)
+    require_view(request)
     data = meetings_repo.detail(recording_id)
     if data is None or not data["recording"]["audio_path"]:
         raise HTTPException(status_code=404, detail="No audio for that recording")
@@ -387,7 +403,7 @@ def settings_page(request: Request):
 # --------------------------------------------------------------------------
 @app.get("/api/term")
 def term_lookup(q: str, request: Request):
-    require_session(request)
+    require_view(request)
     hit = glossary.lookup(q)
     if hit is None:
         return {"known": False, "term": q, "gloss": "", "kind": ""}
