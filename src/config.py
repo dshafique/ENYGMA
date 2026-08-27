@@ -51,12 +51,25 @@ class Config:
     # chosen when there was no way to re-authenticate without locking the whole
     # app; now that the sheet exists and keeps his place, thirty is the humane
     # number and still bounds the unattended-device window.
+    # Timestamps are stored UTC and shown local. Defaults to the machine's own
+    # zone, which on a home server is the operator's. Override if they differ.
+    TZ = os.environ.get("ENYGMA_TZ", "").strip()
+
     REAUTH_MINUTES = int(os.environ.get("ENYGMA_REAUTH_MINUTES", "30"))
     INSECURE_COOKIES = os.environ.get("ENYGMA_INSECURE_COOKIES", "0") == "1"
 
-    # Five failures across passkey and PIN combined, then thirty seconds.
+    # Five failures across passkey and PIN combined, then thirty seconds, then
+    # double for every further round. A short PIN is only safe behind a delay
+    # that grows.
     MAX_ATTEMPTS = 5
     LOCKOUT_SECONDS = 30
+    LOCKOUT_MAX_SECONDS = 60 * 60
+
+    # Digits. Six is the default; four is allowed because a memorable PIN that
+    # gets used beats a long one written on a sticky note, and the backoff above
+    # is what actually carries the weight.
+    PIN_MIN_DIGITS = 4
+    PIN_MAX_DIGITS = 10
 
     # Modules are gated in config, never deleted. The HiNotes poller is off:
     # audio arrives by drag and drop. Turning it back on is one line.

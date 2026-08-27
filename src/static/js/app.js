@@ -467,6 +467,30 @@ $("#retry")?.addEventListener("click", async (e) => {
   $$("[data-revoke]").forEach((b) => b.addEventListener("click", async () => {
     await post(`/auth/devices/${b.dataset.revoke}/revoke`); location.reload();
   }));
+  const pinmsg = $("#pinmsg");
+  const pinSay = (t) => { if (pinmsg) { pinmsg.textContent = t;
+                          setTimeout(() => (pinmsg.textContent = ""), 3200); } };
+  $("#setpin")?.addEventListener("click", async () => {
+    try {
+      await post("/auth/pin/set", { pin: $("#newpin").value });
+      $("#newpin").value = "";
+      pinSay("Saved");
+      setTimeout(() => location.reload(), 700);
+    } catch (e) { pinSay(e.data?.detail || "That PIN was not accepted"); }
+  });
+  $("#clearpin")?.addEventListener("click", async () => {
+    await post("/auth/pin/clear"); location.reload();
+  });
+
+  $("#pairnew")?.addEventListener("click", async () => {
+    try {
+      const res = await post("/auth/pairing/new", {});
+      $("#paircode").textContent = res.code;
+      $("#pairmins").textContent = res.minutes;
+      $("#pairout").hidden = false;
+    } catch (e) { /* the sheet handled it, or it genuinely failed */ }
+  });
+
   const add = $("#addkey");
   if (add) add.addEventListener("click", async () => {
     const { enrol } = await import(`/static/js/passkey.js${V}`);

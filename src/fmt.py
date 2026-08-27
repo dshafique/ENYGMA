@@ -5,6 +5,27 @@ clock that is missing, and Python can be tested.
 """
 from datetime import datetime, timezone, timedelta
 
+try:
+    from zoneinfo import ZoneInfo
+except ImportError:                                   # pragma: no cover
+    ZoneInfo = None
+
+
+def _display_zone():
+    """Where the operator is, for rendering only.
+
+    SQLite's datetime('now') is UTC, which is the right thing to store. It is not
+    the right thing to show: a meeting recorded at ten past midnight read
+    "5:11 AM", which is not a typo the reader can correct for.
+    """
+    from .config import config
+    if config.TZ and ZoneInfo is not None:
+        try:
+            return ZoneInfo(config.TZ)
+        except Exception:
+            pass
+    return datetime.now().astimezone().tzinfo      # the machine's own zone
+
 
 def hms(ms: int | None) -> str:
     """00:42:17 — always three fields, so a column of them lines up."""
@@ -37,9 +58,11 @@ def _parse(value) -> datetime | None:
     for shape, width in (("%Y-%m-%d %H:%M:%S", 19), ("%Y-%m-%d %H:%M", 16),
                          ("%Y-%m-%d", 10)):
         try:
-            return datetime.strptime(text[:width], shape)
+            naive = datetime.strptime(text[:width], shape)
         except ValueError:
             continue
+        # Stored UTC, shown local.
+        return naive.replace(tzinfo=timezone.utc).astimezone(_display_zone())
     return None
 
 
@@ -59,7 +82,7 @@ def daygroup(value) -> str:
     at = _parse(value)
     if at is None:
         return "UNDATED"
-    today = datetime.now(timezone.utc).date()
+    today = datetime.now(_display_zone()).date()
     delta = (today - at.date()).days
     if delta <= 0:
         return "TODAY"
@@ -74,7 +97,7 @@ def ago(value) -> str:
     at = _parse(value)
     if at is None:
         return ""
-    delta = datetime.now(timezone.utc).replace(tzinfo=None) - at
+    delta = datetime.now(_display_zone()) - at
     if delta < timedelta(minutes=1):
         return "just now"
     if delta < timedelta(hours=1):

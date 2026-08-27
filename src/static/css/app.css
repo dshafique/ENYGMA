@@ -488,6 +488,14 @@ h3 { font-size: 15px; font-weight: 600; margin: 0; }
 }
 @media (min-width: 900px) { .sheet-scrim { place-items: center; } .sheet { margin-bottom: 0; } }
 
+.paircode {
+  font-size: 30px; font-weight: 600; letter-spacing: .16em; margin: var(--space-8) 0;
+  color: var(--accent); user-select: all;
+}
+#codebox, #pairout { display: block; }
+#codebox[hidden], #pairout[hidden] { display: none; }
+#codebox { display: flex; gap: var(--space-8); width: min(320px, 100%); }
+
 /* ======================================================================
    Term popover
    ====================================================================== */

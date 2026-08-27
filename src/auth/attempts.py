@@ -18,6 +18,19 @@ def record(method: str, ok: bool) -> None:
             conn.execute("DELETE FROM auth_attempts WHERE ok = 0")
 
 
+def penalty_seconds(failed: int) -> int:
+    """How long this round of failures is worth.
+
+    Flat delays are the wrong shape for a short PIN. Five wrong tries is a fat
+    finger and costs thirty seconds; fifty wrong tries is not a person and costs
+    an hour. Doubling each round means an exhaustive search of a four digit PIN
+    runs out of human lifetime, while a genuine mistake never costs more than the
+    first thirty seconds.
+    """
+    rounds = max(0, failed // config.MAX_ATTEMPTS - 1)
+    return min(config.LOCKOUT_SECONDS * (2 ** rounds), config.LOCKOUT_MAX_SECONDS)
+
+
 def lockout_remaining() -> int:
     """Seconds remaining, or 0."""
     with cursor() as conn:
@@ -29,12 +42,14 @@ def lockout_remaining() -> int:
         )
         if len(rows) < config.MAX_ATTEMPTS:
             return 0
+        total = conn.execute(
+            "SELECT COUNT(*) AS n FROM auth_attempts WHERE ok = 0").fetchone()["n"]
         row = conn.execute(
             "SELECT CAST((julianday('now') - julianday(?)) * 86400 AS INTEGER) AS s",
             (rows[0]["at"],),
         ).fetchone()
         elapsed = row["s"] or 0
-        return max(0, config.LOCKOUT_SECONDS - elapsed)
+        return max(0, penalty_seconds(total) - elapsed)
 
 
 def failures() -> int:

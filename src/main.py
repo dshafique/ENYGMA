@@ -125,6 +125,7 @@ def lock(request: Request):
         {
             "enrolled": passkeys.has_any_credential(),
             "lockout": attempts.lockout_remaining(),
+            "has_pin": secrets_store.has_pin(),
         },
     )
 
@@ -209,6 +210,56 @@ async def pin_verify(request: Request):
         attempts.record("pin", False)
         raise HTTPException(status_code=400, detail="That PIN did not match")
     attempts.record("pin", True)
+    response = JSONResponse({"ok": True})
+    session.set_on(response, session.issue())
+    return response
+
+
+# --------------------------------------------------------------------------
+# PIN management and setup codes
+# --------------------------------------------------------------------------
+@app.post("/auth/pin/set")
+async def pin_set(request: Request):
+    require_session(request)
+    body = await request.json()
+    try:
+        secrets_store.set_pin(str(body.get("pin", "")))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return {"ok": True}
+
+
+@app.post("/auth/pin/clear")
+def pin_clear(request: Request):
+    require_session(request)
+    secrets_store.clear_pin()
+    return {"ok": True}
+
+
+@app.post("/auth/pairing/new")
+async def pairing_new(request: Request):
+    """A single-use code so a second device can enrol its own passkey.
+
+    Requires a fresh session: this is the one credential that can create other
+    credentials, so it is not something a left-open tab should be able to mint.
+    """
+    require_session(request)
+    body = await request.json() if await request.body() else {}
+    return secrets_store.create_pairing_code((body or {}).get("note"))
+
+
+@app.post("/auth/pairing/redeem")
+async def pairing_redeem(request: Request):
+    """Redeemed on the NEW device, which then enrols its passkey."""
+    remaining = attempts.lockout_remaining()
+    if remaining:
+        raise HTTPException(status_code=429, detail={"lockout": remaining})
+    body = await request.json()
+    device = str(body.get("deviceName") or "")[:60] or None
+    if not secrets_store.consume_pairing_code(str(body.get("code", "")), device):
+        attempts.record("pairing", False)
+        raise HTTPException(status_code=400, detail="That setup code is not valid or has expired")
+    attempts.record("pairing", True)
     response = JSONResponse({"ok": True})
     session.set_on(response, session.issue())
     return response
@@ -395,6 +446,9 @@ def settings_page(request: Request):
         "pipeline": config.PIPELINE,
         "model": config.GEMINI_MODEL,
         "version": config.VERSION,
+        "has_pin": secrets_store.has_pin(),
+        "pin_min": config.PIN_MIN_DIGITS,
+        "pin_max": config.PIN_MAX_DIGITS,
     })
 
 

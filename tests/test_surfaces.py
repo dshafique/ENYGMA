@@ -404,3 +404,150 @@ def test_the_sheet_is_present_on_every_page_that_can_write():
         text = c.get(path).text
         assert 'id="reauth"' in text, f"{path} has no re-auth sheet"
         assert 'id="reauth-pin"' in text, "the PIN fallback must be offered too"
+
+
+# ------------------------------------------------------------ the gemini path
+def test_the_gemini_backend_is_actually_installable():
+    """The first real transcription failed on ImportError because google-genai
+    was never in requirements.txt. 'gemini' must not silently mean 'broken'."""
+    import pathlib as _p
+    root = _p.Path(__file__).resolve().parent.parent
+    reqs = (root / "requirements.txt").read_text()
+    assert "google-genai" in reqs, "the Gemini backend has no dependency declared"
+
+
+def test_a_missing_sdk_says_what_to_do_about_it():
+    from src.pipeline.gemini import GeminiBackend
+    import builtins
+    real = builtins.__import__
+
+    def blocked(name, *a, **kw):
+        if name == "google" or name.startswith("google."):
+            raise ImportError("no module named google")
+        return real(name, *a, **kw)
+
+    builtins.__import__ = blocked
+    try:
+        GeminiBackend()._get_client()
+        raise AssertionError("should have raised")
+    except RuntimeError as exc:
+        assert "pip install" in str(exc), "the error must name the fix"
+    finally:
+        builtins.__import__ = real
+
+
+def test_inline_audio_is_base64_not_raw_bytes():
+    """Raw bytes fail at the transport, so the error never mentions audio."""
+    import pathlib as _p, base64, json as _json
+    root = _p.Path(__file__).resolve().parent.parent
+    audio = _p.Path(__file__).parent / "_tiny.mp3"
+    audio.write_bytes(b"ID3" + b"\x77" * 512)
+    captured = {}
+
+    class Fake:
+        class files:
+            @staticmethod
+            def upload(file):
+                raise AssertionError("small file should go inline")
+        class interactions:
+            @staticmethod
+            def create(model, input):
+                captured["input"] = input
+                class R: output_text = _json.dumps(
+                    {"segments": [{"speaker": "SPEAKER 1", "start": "00:00",
+                                   "end": "00:05", "text": "hello"}]})
+                return R()
+
+    from src.pipeline.gemini import GeminiBackend
+    out = GeminiBackend(client=Fake()).transcribe(audio, "audio/mpeg")
+    audio.unlink()
+    assert out.segments[0].text == "hello"
+    part = [p for p in captured["input"] if p.get("type") == "audio"][0]
+    assert isinstance(part["data"], str), "inline audio must be base64 text"
+    assert base64.b64decode(part["data"]) == b"ID3" + b"\x77" * 512
+
+
+# ----------------------------------------------------------------- timestamps
+def test_times_are_shown_in_the_operators_zone_not_utc():
+    """A meeting recorded at ten past midnight read '5:11 AM'. SQLite stores UTC,
+    which is right; the screen showed UTC, which is not."""
+    from src import fmt
+    from datetime import datetime, timezone
+    stored = "2026-08-27 05:11:30"          # what SQLite wrote for a 00:11 local upload
+    shown = fmt.clock(stored)
+    expected = (datetime(2026, 8, 27, 5, 11, 30, tzinfo=timezone.utc)
+                .astimezone(fmt._display_zone()).strftime("%-I:%M %p"))
+    assert shown == expected
+    assert fmt._parse(stored).tzinfo is not None, "parsed timestamps must be aware"
+
+
+# ------------------------------------------------------------- pin and pairing
+def test_a_four_digit_pin_is_allowed_but_a_repeated_one_is_not():
+    from src.auth import secrets_store as ss
+    ss.set_pin("0125")
+    assert ss.verify_pin("0125") and not ss.verify_pin("0126")
+    for bad in ("123", "1111", "abcd", "12345678901"):
+        try:
+            ss.set_pin(bad)
+            raise AssertionError(f"{bad} should have been refused")
+        except ValueError:
+            pass
+
+
+def test_the_lockout_grows_so_a_short_pin_is_still_a_real_lock():
+    from src.auth.attempts import penalty_seconds
+    assert penalty_seconds(5) == 30
+    assert penalty_seconds(10) == 60
+    assert penalty_seconds(20) == 240
+    assert penalty_seconds(10_000) == 60 * 60, "and it is capped"
+    # An exhaustive search of 10,000 combinations, five per round.
+    rounds = 10_000 // 5
+    assert sum(penalty_seconds(r * 5) for r in range(1, rounds)) > 60 * 60 * 24 * 30
+
+
+def test_a_setup_code_enrols_one_device_once():
+    from src.auth import secrets_store as ss
+    made = ss.create_pairing_code("Fold 8")
+    assert "-" in made["code"] and len(made["code"]) == 9
+    assert ss.consume_pairing_code("AAAA-BBBB") is False
+    assert ss.consume_pairing_code(made["code"], "Fold 8") is True
+    assert ss.consume_pairing_code(made["code"]) is False, "single use"
+    assert ss.pairing_outstanding() is False
+
+
+def test_minting_a_setup_code_needs_a_fresh_session():
+    """It is the one credential that creates other credentials."""
+    assert _stale_client().post("/auth/pairing/new", json={}).status_code == 401
+    assert client(signed_in=False).post("/auth/pairing/new", json={}).status_code == 401
+    assert client().post("/auth/pairing/new", json={}).status_code == 200
+
+
+def test_redeeming_a_code_signs_the_new_device_in():
+    c = client()
+    code = c.post("/auth/pairing/new", json={"note": "Fold"}).json()["code"]
+    fresh = client(signed_in=False)
+    assert fresh.get("/meetings").status_code == 302
+    assert fresh.post("/auth/pairing/redeem",
+                      json={"code": code, "deviceName": "Fold"}).status_code == 200
+    assert fresh.get("/meetings").status_code == 200
+
+
+def test_the_lock_screen_offers_the_setup_code_path_once_a_device_exists():
+    """With nothing enrolled the first device just creates a passkey. The setup
+    code only means anything once there is an account to join."""
+    from src.db import cursor
+    bare = client(signed_in=False).get("/lock").text
+    assert "Create your passkey" in bare
+    assert "Use a setup code" not in bare, "nothing to pair with yet"
+
+    with cursor() as conn:
+        conn.execute("INSERT INTO credentials (credential_id, public_key, device_name) "
+                     "VALUES (?, ?, 'Desktop')", (b"cred-1", b"key-1"))
+    try:
+        page = client(signed_in=False).get("/lock").text
+        assert "Unlock with passkey" in page
+        assert "Use a setup code" in page
+        assert "Use PIN instead" in page, "a PIN was set earlier in this module"
+    finally:
+        with cursor() as conn:
+            conn.execute("DELETE FROM credentials WHERE credential_id = ?", (b"cred-1",))

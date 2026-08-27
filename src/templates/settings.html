@@ -18,7 +18,34 @@
     {% else %}
       <p class="dim">No device enrolled.</p>
     {% endif %}
-    <button class="btn line sm" id="addkey" style="align-self:flex-start">Add this device</button>
+    <div class="spread">
+      <button class="btn line sm" id="addkey">Add this device</button>
+      <button class="btn line sm" id="pairnew">Set up another device</button>
+    </div>
+    <div id="pairout" hidden>
+      <span class="label">Setup code</span>
+      <p class="paircode mono" id="paircode"></p>
+      <p class="dim" style="font-size:13px">On the other device, open
+        <span class="mono">enygma.arkhm.io</span> and choose
+        <span class="mono">Use a setup code</span>. It works once and expires in
+        <span id="pairmins">10</span> minutes.</p>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:var(--space-16)">
+    <div class="card-head"><h2>PIN</h2>
+      <span class="label">{{ 'Set' if has_pin else 'Not set' }}</span></div>
+    <p class="dim" style="font-size:14px">The way back in when the passkey is not
+      available. {{ pin_min }} to {{ pin_max }} digits. Wrong guesses lock out for
+      longer each time, so a short one is still a real lock.</p>
+    <div class="spread">
+      <input class="pinfield mono" id="newpin" type="password" inputmode="numeric"
+             autocomplete="new-password" placeholder="New PIN" aria-label="New PIN"
+             style="max-width:160px">
+      <button class="btn line sm" id="setpin">Save PIN</button>
+      {% if has_pin %}<button class="btn ghost sm danger" id="clearpin">Remove</button>{% endif %}
+    </div>
+    <span class="label" id="pinmsg"></span>
   </div>
 
   <div class="card" style="margin-bottom:var(--space-16)">

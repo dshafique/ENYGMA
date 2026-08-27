@@ -6,4 +6,10 @@ itsdangerous==2.2.0
 webauthn==2.5.0
 argon2-cffi==23.1.0
 httpx==0.28.1
+
+# The Gemini backend. Absent from this file until the first real transcription
+# failed on ImportError, which is the whole reason ENYGMA_PIPELINE=stub exists as
+# a default: the app must run without it, but 'gemini' must not silently mean
+# 'broken'.
+google-genai==2.20.0
 pytest==8.3.4

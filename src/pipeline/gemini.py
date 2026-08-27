@@ -16,6 +16,7 @@ because a transcript without a clock is still a transcript.
 """
 from __future__ import annotations
 
+import base64
 import json
 import re
 from pathlib import Path
@@ -87,7 +88,17 @@ class GeminiBackend(Backend):
 
     def _get_client(self):
         if self._client is None:
-            from google import genai
+            try:
+                from google import genai
+            except ImportError as exc:
+                # "cannot import name 'genai' from 'google'" tells the operator
+                # nothing about what to do next. This does.
+                raise RuntimeError(
+                    "The Gemini SDK is not installed, so ENYGMA_PIPELINE=gemini "
+                    "cannot work. Install it with:  .venv/bin/pip install -r "
+                    "requirements.txt  then restart. "
+                    f"(underlying: {exc})"
+                ) from exc
             self._client = genai.Client(api_key=config.gemini_key())
         return self._client
 
@@ -105,7 +116,13 @@ class GeminiBackend(Backend):
             uploaded = client.files.upload(file=str(path))
             audio_part = {"type": "audio", "uri": uploaded.uri, "mime_type": uploaded.mime_type}
         else:
-            audio_part = {"type": "audio", "data": path.read_bytes(), "mime_type": mime}
+            # Inline audio is base64 text, not raw bytes. Sending bytes fails at
+            # the transport, not at the model, so the error does not mention audio.
+            audio_part = {
+                "type": "audio",
+                "data": base64.b64encode(path.read_bytes()).decode("ascii"),
+                "mime_type": mime,
+            }
 
         raw = self._ask([{"type": "text", "text": TRANSCRIBE_PROMPT}, audio_part])
         payload = _json_from(raw)
