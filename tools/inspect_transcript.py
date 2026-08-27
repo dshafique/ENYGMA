@@ -137,6 +137,15 @@ def main() -> int:
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
     if not args:
         return listing()
+
+    if not args[0].isdigit():
+        # Placeholders in documentation get pasted literally, and a shell eats
+        # angle brackets before this program ever sees them. Say what to do
+        # instead of raising a traceback about it.
+        print(f"'{args[0]}' is not a recording id. Here is the list; pass a")
+        print("number from the first column.\n")
+        return listing()
+
     return analyse(int(args[0]), "--text" in sys.argv)
 
 
