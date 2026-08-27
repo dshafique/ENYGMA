@@ -546,8 +546,82 @@ def test_the_lock_screen_offers_the_setup_code_path_once_a_device_exists():
     try:
         page = client(signed_in=False).get("/lock").text
         assert "Unlock with passkey" in page
-        assert "Use a setup code" in page
+        assert "Set up this device" in page
         assert "Use PIN instead" in page, "a PIN was set earlier in this module"
     finally:
         with cursor() as conn:
             conn.execute("DELETE FROM credentials WHERE credential_id = ?", (b"cred-1",))
+
+
+# ----------------------------------------------------------------------- PWA
+def test_the_manifest_and_worker_are_served_from_the_root():
+    """A service worker only controls the scope it is served from, and both are
+    read before there is any session."""
+    c = client(signed_in=False)
+    man = c.get("/manifest.webmanifest")
+    assert man.status_code == 200
+    assert man.headers["content-type"].startswith("application/manifest+json")
+    import json
+    body = json.loads(man.content)
+    assert body["display"] == "standalone"
+    assert body["start_url"] == "/" and body["scope"] == "/"
+    purposes = {i["purpose"] for i in body["icons"]}
+    assert {"any", "maskable"} <= purposes, "Android needs a maskable icon"
+
+    sw = c.get("/sw.js")
+    assert sw.status_code == 200
+    assert sw.headers["service-worker-allowed"] == "/"
+    assert sw.headers["cache-control"] == "no-cache", "the worker itself must not be cached"
+
+
+def test_every_declared_icon_exists_and_is_a_real_png():
+    import json, pathlib as _p
+    root = _p.Path(__file__).resolve().parent.parent
+    body = json.loads((root / "src/static/manifest.webmanifest").read_text())
+    for icon in body["icons"]:
+        path = root / icon["src"].lstrip("/").replace("static/", "src/static/", 1)
+        assert path.exists(), f"{icon['src']} is declared but missing"
+        assert path.read_bytes()[:8] == b"\x89PNG\r\n\x1a\n", f"{icon['src']} is not a PNG"
+        w, h = icon["sizes"].split("x")
+        from struct import unpack
+        head = path.read_bytes()[16:24]
+        assert unpack(">II", head) == (int(w), int(h)), f"{icon['src']} is not {icon['sizes']}"
+
+
+def test_the_worker_refuses_to_cache_anything_private():
+    """Everything this app renders is private. A worker that caches pages leaves
+    transcripts on the device outside the permissions that are the whole
+    isolation story, and serves them back after a logout."""
+    import pathlib as _p
+    sw = (_p.Path(__file__).resolve().parent.parent / "src/static/sw.js").read_text()
+    assert 'url.pathname.startsWith("/static/")' in sw
+    assert 'url.searchParams.has("v")' in sw, "only immutable, versioned assets"
+    assert "caches.open" in sw
+    # No route that could hold private content may appear as a cache target.
+    for private in ("/meetings", "/api/", "/auth/", "/chat", "/upload"):
+        assert f'cache.put("{private}' not in sw and f"addAll" not in sw
+
+
+def test_the_page_advertises_itself_as_installable():
+    page = client().get("/").text
+    assert 'rel="manifest"' in page
+    assert 'name="apple-touch-icon"' not in page and 'rel="apple-touch-icon"' in page
+    assert page.count('name="theme-color"') == 2, "one per colour scheme"
+    assert 'navigator.serviceWorker' in page
+
+
+def test_a_four_digit_entry_in_the_setup_code_box_is_named_as_a_pin():
+    """0125 typed into the setup code field returned 'not valid or has expired',
+    which is true and useless. It is a PIN, and the screen should say so."""
+    from src.db import cursor
+    with cursor() as conn:
+        conn.execute("INSERT INTO credentials (credential_id, public_key, device_name) "
+                     "VALUES (?, ?, 'Desktop')", (b"cred-2", b"key-2"))
+    try:
+        page = client(signed_in=False).get("/lock").text
+    finally:
+        with cursor() as conn:
+            conn.execute("DELETE FROM credentials WHERE credential_id = ?", (b"cred-2",))
+    assert "That is a PIN, not a setup code" in page
+    assert "eight letters and numbers" in page
+    assert "It is not your PIN." in page

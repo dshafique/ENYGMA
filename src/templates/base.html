@@ -4,7 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
-<meta name="theme-color" content="#0d0d0f">
+<meta name="theme-color" content="#f4f4f6" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0d0d0f" media="(prefers-color-scheme: dark)">
+<link rel="manifest" href="/manifest.webmanifest?v={{ build }}">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="ENYGMA">
+<link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png?v={{ build }}">
 <title>{% block title %}ENYGMA{% endblock %}</title>
 <link rel="icon" href="/static/favicon.svg?v={{ build }}" type="image/svg+xml">
 <link rel="stylesheet" href="/static/css/tokens.css?v={{ build }}">
@@ -94,6 +100,14 @@
 </nav>
 {% endblock %}
 <script src="/static/js/app.js?v={{ build }}" type="module"></script>
+<script>
+  /* Registered with the build in the URL, so a new release replaces the worker
+     rather than leaving yesterday's in charge. */
+  if ("serviceWorker" in navigator) {
+    addEventListener("load", () => navigator.serviceWorker
+      .register("/sw.js?v={{ build }}", { scope: "/" }).catch(() => {}));
+  }
+</script>
 {% block scripts %}{% endblock %}
 </body>
 </html>

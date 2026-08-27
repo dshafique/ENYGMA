@@ -130,6 +130,21 @@ def lock(request: Request):
     )
 
 
+# A service worker may only control the scope it is served from, and the
+# manifest is read before there is any session, so both sit at the root.
+@app.get("/sw.js")
+def service_worker():
+    return FileResponse(HERE / "static/sw.js", media_type="application/javascript",
+                        headers={"Cache-Control": "no-cache",
+                                 "Service-Worker-Allowed": "/"})
+
+
+@app.get("/manifest.webmanifest")
+def manifest():
+    return FileResponse(HERE / "static/manifest.webmanifest",
+                        media_type="application/manifest+json")
+
+
 @app.get("/healthz")
 def healthz():
     return {"ok": True, "app": "enygma", "port": config.PORT,
