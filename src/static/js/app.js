@@ -548,27 +548,90 @@ $("#retry")?.addEventListener("click", async (e) => {
 /* -------------------------------------------------------------- chat */
 {
   const convo = $("#convo");
-  if (convo) convo.scrollTop = convo.scrollHeight;
+  const toBottom = () => { if (convo) convo.scrollTop = convo.scrollHeight; };
+  toBottom();
   const body = $("#body");
   const form = $("#say");
-  body?.addEventListener("input", () => {
+  const button = form?.querySelector("button[type=submit]");
+
+  const grow = () => {
+    if (!body) return;
     body.style.height = "auto";
     body.style.height = Math.min(body.scrollHeight, 180) + "px";
-  });
+  };
+  body?.addEventListener("input", grow);
+
+  /* Enter sends only where there is a Shift key to hold for a newline.
+     On a phone the return key is the ONLY way to start a new line, and there is
+     no Shift+Enter to fall back on, so sending on Enter meant a half-finished
+     sentence was posted the moment he reached for a line break -- four times,
+     in the case that turned this up. Touch keyboards get a return key that
+     returns; the send button is how a message is sent. */
+  const keyboardSends = matchMedia("(hover: hover) and (pointer: fine)").matches;
   body?.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); form?.requestSubmit(); }
+    if (e.key !== "Enter" || e.isComposing || e.keyCode === 229) return;
+    if (!keyboardSends || e.shiftKey) return;
+    e.preventDefault();
+    form?.requestSubmit();
   });
-  // Submitted through fetch rather than as a form post, so a stale session
-  // raises the sheet instead of bouncing him to the lock screen and throwing
-  // away what he had typed.
+
+  /* One turn at a time. Without this, every press while an answer was being
+     written started another identical turn, because the field still held the
+     text and nothing said a request was already in flight. */
+  let sending = false;
+
+  const pending = (text) => {
+    if (!convo) return null;
+    const empty = convo.querySelector(".empty");
+    if (empty) empty.remove();
+    const wrap = document.createElement("div");
+    wrap.innerHTML =
+      '<div class="turn operator"><div class="who"><span class="label">You</span></div>' +
+      '<div class="bubble"></div></div>' +
+      '<div class="turn enygma pending"><div class="who"><span class="label">ENYGMA</span></div>' +
+      '<div class="bubble dim">Thinking\u2026</div></div>';
+    wrap.querySelector(".turn.operator .bubble").textContent = text;
+    const nodes = Array.from(wrap.children);
+    nodes.forEach((n) => convo.appendChild(n));
+    toBottom();
+    return nodes;
+  };
+
   form?.addEventListener("submit", async (e) => {
     e.preventDefault();
+    if (sending) return;
     const text = body.value.trim();
     if (!text) return;
-    const data = new FormData();
-    data.append("body", text);
-    const res = await send(form.action, { method: "POST", body: data });
-    if (res.ok) location.reload();
+
+    sending = true;
+    body.disabled = true;
+    if (button) button.disabled = true;
+    // Cleared straight away: whatever else happens, the same sentence cannot be
+    // sent twice by a second press landing on text that was never taken away.
+    body.value = "";
+    grow();
+    const shown = pending(text);
+
+    const restore = () => {
+      shown?.forEach((n) => n.remove());
+      body.value = text;
+      grow();
+      body.focus();
+    };
+
+    try {
+      const data = new FormData();
+      data.append("body", text);
+      const res = await send(form.action, { method: "POST", body: data });
+      if (!res.ok) { restore(); return; }
+      location.reload();
+    } catch (err) {
+      restore();
+    } finally {
+      sending = false;
+      body.disabled = false;
+      if (button) button.disabled = false;
+    }
   });
 }
 

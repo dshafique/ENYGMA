@@ -501,6 +501,13 @@ pre.doc {
   background: var(--surface-low); color: var(--text);
   font-family: var(--font-prose); font-size: 15px; line-height: 20px;
 }
+.composer textarea:disabled { opacity: 0.6; }
+/* Said once, quietly, on the surface where the mistake was actually made: on a
+   phone there is no Shift+Enter, so it has to be clear that Return is safe. */
+.composer-hint { max-width: var(--reading); margin: var(--space-8) auto 0;
+                 color: var(--text-muted); font-size: 12px; line-height: 16px; }
+@media (hover: hover) and (pointer: fine) { .composer-hint { display: none; } }
+.turn.pending .bubble { color: var(--text-muted); }
 @media (max-width: 899px) {
   .chatwrap { grid-template-columns: minmax(0, 1fr); }
   .chatwrap.at-convo .threads { display: none; }

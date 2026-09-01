@@ -51,9 +51,11 @@
       </div>
       <div class="composer">
         <form method="post" action="/chat/{{ current.thread.id }}/say" id="say">
-          <textarea name="body" id="body" rows="1" placeholder="Ask ENYGMA" required></textarea>
+          <textarea name="body" id="body" rows="1" placeholder="Ask ENYGMA"
+                    enterkeyhint="enter" required></textarea>
           <button class="btn" type="submit" aria-label="Send">{{ i.icon('send') }}</button>
         </form>
+        <p class="composer-hint">Return starts a new line. Send with the button.</p>
       </div>
     {% else %}
       <div class="page">

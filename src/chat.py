@@ -54,16 +54,52 @@ def _append(thread_id: int, role: str, body: str) -> None:
                      (thread_id,))
 
 
+# A resend of the same sentence inside this many seconds is a double-press, not
+# a second question. The composer already guards against it; this is the net
+# under that, for a flaky mobile connection retrying a request that in fact
+# arrived.
+DUPLICATE_SECONDS = 20
+
+
 def say(thread_id: int, body: str) -> dict:
     """One turn. His message in, one reply out."""
     body = (body or "").strip()
     if not body:
         raise ValueError("Nothing to send")
+    repeat = _recent_duplicate(thread_id, body)
+    if repeat is not None:
+        return {"reply": repeat, "duplicate": True}
+    history = _history(thread_id)
     _append(thread_id, "operator", body)
     _title_from_first(thread_id, body)
-    reply = _answer(body, caveat=_first_reply(thread_id))
+    reply = _answer(body, caveat=_first_reply(thread_id), history=history)
     _append(thread_id, "enygma", reply)
     return {"reply": reply}
+
+
+def _recent_duplicate(thread_id: int, body: str) -> str | None:
+    """The same words again, seconds later. Answer with what was already said."""
+    with cursor() as conn:
+        row = conn.execute(
+            "SELECT id, body, (julianday('now') - julianday(created_at)) * 86400.0 AS age "
+            "FROM chat_messages WHERE thread_id = ? AND role = 'operator' "
+            "ORDER BY id DESC LIMIT 1", (thread_id,)).fetchone()
+        if row is None or row["body"] != body or (row["age"] or 0) > DUPLICATE_SECONDS:
+            return None
+        answer = conn.execute(
+            "SELECT body FROM chat_messages WHERE thread_id = ? AND role = 'enygma' "
+            "AND id > ? ORDER BY id LIMIT 1", (thread_id, row["id"])).fetchone()
+    # The first press is still being answered; nothing to add by asking twice.
+    return answer["body"] if answer else ""
+
+
+def _history(thread_id: int, turns: int = 12) -> list[dict]:
+    """What has already been said, oldest first, most recent turns only."""
+    with cursor() as conn:
+        rows = conn.execute(
+            "SELECT role, body FROM chat_messages WHERE thread_id = ? "
+            "ORDER BY id DESC LIMIT ?", (thread_id, turns)).fetchall()
+    return [{"role": r["role"], "body": r["body"]} for r in reversed(rows)]
 
 
 def _title_from_first(thread_id: int, body: str) -> None:
@@ -85,7 +121,17 @@ def _first_reply(thread_id: int) -> bool:
     return (row["n"] if row else 0) == 0
 
 
-def _answer(question: str, caveat: bool = True) -> str:
+def _transcript(history: list[dict]) -> str:
+    """The thread so far, as plain speech, so a follow-up has something to follow."""
+    lines = []
+    for turn in history:
+        who = "Operator" if turn["role"] == "operator" else "ENYGMA"
+        lines.append(f"{who}: {turn['body']}")
+    return "\n\n".join(lines)
+
+
+def _answer(question: str, caveat: bool = True,
+            history: list[dict] | None = None) -> str:
     hit = glossary.lookup(_probable_term(question))
     found = library.context_for(question)
 
@@ -104,10 +150,21 @@ def _answer(question: str, caveat: bool = True) -> str:
         from .pipeline.gemini import GeminiBackend
         backend = GeminiBackend()
         prompt = (
-            "You are ENYGMA, answering one question for an engineering intern. "
-            "Be direct and concrete. Three short paragraphs at most. If you are "
-            "not sure, say so.\n\nQuestion: " + question
+            "You are ENYGMA, answering an engineering intern in an ongoing "
+            "conversation. Be direct and concrete. Three short paragraphs at "
+            "most. If you are not sure, say so."
         )
+        # Without this the thread had no memory: every turn was answered cold,
+        # so "what about the second one?" was unanswerable and the same sentence
+        # asked twice produced two unrelated essays instead of one thread.
+        if history:
+            prompt += (
+                "\n\nThe conversation so far, oldest first. Do not repeat "
+                "yourself; carry on from it, and read a short or elliptical "
+                "message as a follow-up to what was already said:\n\n"
+                + _transcript(history)
+            )
+        prompt += "\n\nOperator: " + question
         if hit:
             prompt += f"\n\nThe app's own glossary says: {hit['gloss']}"
         if found["text"]:
