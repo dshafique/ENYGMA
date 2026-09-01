@@ -36,11 +36,12 @@
              data-title="{{ m.title|lower }}">
             <div class="rec-top">
               <span class="rec-title">{{ m.title }}</span>
-              <span class="rec-dur">{{ m.duration_ms|hms }}</span>
+              <span class="rec-dur">{{ 'notes' if m.source == 'notes' else m.duration_ms|hms }}</span>
             </div>
             <div class="rec-meta">
               <span class="pill {{ m.status }}"><i class="dot"></i>{{ m.status|upper }}</span>
               <span>{{ (m.recorded_at or m.created_at)|clock }}</span>
+              {% if m.source == 'notes' %}<span class="pill notes"><i class="dot"></i>NOTES</span>{% endif %}
               {% if m.open_actions %}<span>· {{ m.open_actions }} open</span>{% endif %}
             </div>
           </a>
@@ -69,15 +70,16 @@
         {% endif %}
 
         <label class="drop" id="drop">
-          <input type="file" id="file" multiple accept="audio/*,.mp3,.wav,.m4a,.aac,.ogg,.flac,.aiff,.aif">
+          <input type="file" id="file" multiple accept="audio/*,.mp3,.wav,.m4a,.aac,.ogg,.flac,.aiff,.aif,.txt,.md,.markdown,.html,.htm,.pdf,.rst">
           <div class="cells">
             <i class="void"></i><i></i><i></i><i></i>
             <i></i><i></i><i class="void"></i><i></i>
             <i></i><i class="void"></i><i></i><i></i>
             <i></i><i></i><i></i><i class="void"></i>
           </div>
-          <h2>Drop audio here</h2>
-          <p class="sub">mp3, wav, m4a, aac, ogg, flac or aiff. Up to {{ max_mb }} MB each.
+          <h2>Drop audio or notes here</h2>
+          <p class="sub">Audio: mp3, wav, m4a, aac, ogg, flac, aiff — up to {{ max_mb }} MB each.
+             Notes: txt, md, html or pdf, for a meeting nobody recorded.
              The same file twice is one meeting.</p>
         </label>
         <div class="queue" id="queue"></div>

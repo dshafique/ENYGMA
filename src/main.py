@@ -19,7 +19,7 @@ from fastapi.templating import Jinja2Templates
 from .config import config
 from .db import migrate, cursor
 from .auth import session, passkeys, attempts, secrets_store
-from .ingest import poller, upload
+from .ingest import poller, upload, notes as notes_ingest
 from .pipeline import runner
 from .export import as_markdown
 from . import (library, meetings as meetings_repo, actions as actions_repo,
@@ -355,13 +355,19 @@ def meetings_api(request: Request):
 
 @app.post("/upload")
 async def upload_audio(request: Request, files: list[UploadFile] = File(...)):
+    """Audio, or notes for a meeting nobody recorded. Same dropzone either way."""
     require_session(request)
     results = []
     for item in files:
         try:
-            results.append({"filename": item.filename, "ok": True,
-                            **upload.store(item.filename, item.file)})
-        except upload.Rejected as exc:
+            if notes_ingest.is_notes(item.filename):
+                raw = await item.read()
+                results.append({"filename": item.filename, "ok": True,
+                                **notes_ingest.store(item.filename, raw)})
+            else:
+                results.append({"filename": item.filename, "ok": True, "kind": "audio",
+                                **upload.store(item.filename, item.file)})
+        except (upload.Rejected, library.Rejected) as exc:
             results.append({"filename": item.filename, "ok": False, "reason": str(exc)})
         finally:
             await item.close()

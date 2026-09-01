@@ -7,14 +7,25 @@
     {{ i.icon('back') }} All meetings</a>
 
   <h1>{{ r.title }}</h1>
+  {% set from_notes = r.source == 'notes' %}
   <div class="detail-meta">
     <span>{{ (r.recorded_at or r.created_at)|longdate }}</span>
-    <span>{{ (r.recorded_at or r.created_at)|clock }}</span>
-    <span class="mono">{{ r.duration_ms|hms }}</span>
+    {% if not from_notes %}
+      <span>{{ (r.recorded_at or r.created_at)|clock }}</span>
+      <span class="mono">{{ r.duration_ms|hms }}</span>
+    {% endif %}
     <span class="pill {{ r.status }}"><i class="dot"></i>{{ r.status|upper }}</span>
+    {% if from_notes %}<span class="pill notes"><i class="dot"></i>FROM NOTES</span>{% endif %}
   </div>
 
-  {% if r.note %}
+  {% if from_notes %}
+  <div class="banner" style="margin-top:var(--space-20)">
+    <span class="label">From notes</span>
+    <p>Nobody recorded this one. Everything below was read out of
+       {{ r.original_filename or 'a text file' }} — there is no audio to check any
+       of it against, and nothing here carries a timestamp.</p>
+  </div>
+  {% elif r.note %}
   <div class="banner warn" style="margin-top:var(--space-20)">
     <span class="label">Incomplete</span>
     <p>{{ r.note }}</p>
@@ -39,6 +50,8 @@
   {% endif %}
 
   <div class="speakers">
+    {% if from_notes and data.speakers %}<span class="label"
+      style="align-self:center;margin-right:var(--space-4)">Attended</span>{% endif %}
     {% for s in data.speakers %}
     <span class="spk{{ '' if s.person_name else ' unnamed' }}">
       <span class="av">{{ (s.person_name or s.label)|initials }}</span>
@@ -56,7 +69,7 @@
 
   <div class="tabs" role="tablist">
     <button role="tab" aria-selected="true" data-tab="summary">Summary</button>
-    <button role="tab" aria-selected="false" data-tab="transcript">Transcript</button>
+    <button role="tab" aria-selected="false" data-tab="transcript">{{ 'Notes' if from_notes else 'Transcript' }}</button>
     <button role="tab" aria-selected="false" data-tab="actions">Actions</button>
   </div>
 
@@ -73,7 +86,8 @@
         {% for d in data.summary.decisions %}
         <div class="item">
           <span class="txt">{{ d.text }}</span>
-          <button class="stamp" data-seek="{{ d.at_ms }}">{{ d.at_ms|mmss }}</button>
+          {% if d.at_ms is not none %}
+          <button class="stamp" data-seek="{{ d.at_ms }}">{{ d.at_ms|mmss }}</button>{% endif %}
         </div>
         {% endfor %}
       </div>
@@ -84,7 +98,8 @@
         {% for q in data.summary.questions %}
         <div class="item">
           <span class="txt">{{ q.text }}</span>
-          <button class="stamp" data-seek="{{ q.at_ms }}">{{ q.at_ms|mmss }}</button>
+          {% if q.at_ms is not none %}
+          <button class="stamp" data-seek="{{ q.at_ms }}">{{ q.at_ms|mmss }}</button>{% endif %}
         </div>
         {% endfor %}
       </div>
@@ -104,7 +119,8 @@
       <div class="seg" data-start="{{ s.start_ms }}" data-end="{{ s.end_ms }}">
         <div class="who">
           <span>{{ s.speaker_label }}</span>
-          <button class="stamp" data-seek="{{ s.start_ms }}">{{ s.start_ms|mmss }}</button>
+          {% if s.start_ms is not none %}
+          <button class="stamp" data-seek="{{ s.start_ms }}">{{ s.start_ms|mmss }}</button>{% endif %}
         </div>
         <p>{{ s.text }}</p>
       </div>

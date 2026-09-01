@@ -12,6 +12,8 @@ import traceback
 
 from ..config import config, BASE_DIR
 from ..db import cursor
+from ..ingest import notes as notes_ingest
+from .base import Segment, Transcript
 from .gemini import get_backend
 
 _stop = threading.Event()
@@ -46,8 +48,9 @@ def claim_next() -> dict | None:
         conn.execute("BEGIN IMMEDIATE")
         try:
             row = conn.execute(
-                "SELECT id, audio_path, mime, title FROM recordings "
-                "WHERE status = 'queued' AND audio_path IS NOT NULL "
+                "SELECT id, audio_path, mime, title, source, source_text "
+                "FROM recordings WHERE status = 'queued' "
+                "  AND (audio_path IS NOT NULL OR source_text IS NOT NULL) "
                 "ORDER BY id LIMIT 1"
             ).fetchone()
             if row is None:
@@ -115,6 +118,8 @@ def process_one(backend=None) -> dict | None:
         return None
     backend = backend or get_backend()
     try:
+        if job.get("source") == "notes":
+            return _process_notes(job, backend)
         path = BASE_DIR / job["audio_path"]
         transcript = backend.transcribe(path, job["mime"] or "audio/mpeg")
         summary = backend.summarise(transcript)
@@ -130,6 +135,48 @@ def process_one(backend=None) -> dict | None:
                 (reason, job["id"]),
             )
         return {"id": job["id"], "status": "failed", "detail": reason}
+
+
+def _process_notes(job: dict, backend) -> dict:
+    """A meeting that arrived as notes. Same destination, different road.
+
+    The notes themselves become the segments, so the reader, the search and the
+    hold-a-word popover work exactly as they do for a transcript. They carry no
+    timestamps, and every claim drawn from them carries none either, because
+    there is no recording for one to point at.
+    """
+    text = job["source_text"] or ""
+    read = backend.digest_notes(text)
+
+    blocks = notes_ingest.paragraphs(text)
+    transcript = Transcript(
+        segments=[Segment(speaker_label="NOTES", start_ms=None, end_ms=None, text=b)
+                  for b in blocks],
+        model=read["summary"].model or "notes",
+        note=("This meeting came from notes, not a recording. There is no audio "
+              "to check any of it against, and nothing here carries a timestamp."),
+    )
+    _write_results(job["id"], transcript, read["summary"])
+
+    with cursor() as conn:
+        if read["title"]:
+            conn.execute("UPDATE recordings SET title = ? WHERE id = ?",
+                         (read["title"][:200], job["id"]))
+        if read["date"]:
+            conn.execute(
+                "UPDATE recordings SET recorded_at = ? WHERE id = ?",
+                (f"{read['date']} 00:00:00", job["id"]))
+        # Attendees are people who were in the room, which is not the same claim
+        # as having spoken. turns stays 0 and the interface says "attended".
+        conn.execute("DELETE FROM speakers WHERE recording_id = ?", (job["id"],))
+        for i, name in enumerate(read["attendees"], start=1):
+            conn.execute(
+                "INSERT OR REPLACE INTO speakers (recording_id, label, person_name, turns) "
+                "VALUES (?, ?, ?, 0)", (job["id"], f"ATTENDEE {i}", name))
+        conn.execute(
+            "UPDATE recordings SET duration_ms = NULL, note = ? WHERE id = ?",
+            (transcript.note, job["id"]))
+    return {"id": job["id"], "status": "ready", "segments": len(blocks), "kind": "notes"}
 
 
 def drain(limit: int = 100, backend=None) -> list[dict]:

@@ -51,7 +51,7 @@ def test_root_with_a_session_is_the_home_screen():
 def test_meetings_page_renders_the_dropzone():
     r = client(signed_in=True).get("/meetings")
     assert r.status_code == 200
-    assert "Drop audio here" in r.text
+    assert "Drop audio or notes here" in r.text
     assert "Meetings" in r.text
 
 

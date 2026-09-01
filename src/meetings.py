@@ -7,7 +7,7 @@ def listing() -> list[dict]:
     with cursor() as conn:
         rows = conn.execute(
             "SELECT r.id, r.title, r.status, r.duration_ms, r.bytes, r.failure, "
-            "       r.created_at, r.recorded_at, r.original_filename, "
+            "       r.created_at, r.recorded_at, r.original_filename, r.source, r.note, "
             "       (SELECT COUNT(*) FROM speakers s WHERE s.recording_id = r.id) AS speakers, "
             "       (SELECT COUNT(*) FROM action_items a "
             "        WHERE a.recording_id = r.id AND a.done_at IS NULL) AS open_actions "

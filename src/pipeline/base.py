@@ -55,3 +55,9 @@ class Backend:
 
     def summarise(self, transcript: Transcript) -> Summary:
         raise NotImplementedError
+
+    def digest_notes(self, text: str) -> dict:
+        """Read a meeting that arrived as notes. Returns title, date, attendees
+        and a Summary whose claims carry no timestamps, because there is no
+        recording for them to point at."""
+        raise NotImplementedError

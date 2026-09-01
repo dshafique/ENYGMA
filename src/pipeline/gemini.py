@@ -59,6 +59,57 @@ TRANSCRIPT:
 """
 
 
+NOTES_PROMPT = """These are notes from a meeting. Nobody recorded it, so there is
+no audio and no transcript: this is all there is.
+
+Return JSON only, with this exact shape:
+{"title":"...",
+ "date":"YYYY-MM-DD or null",
+ "attendees":["Full Name", ...],
+ "abstract":"...",
+ "decisions":[{"text":"..."}],
+ "questions":[{"text":"..."}],
+ "actions":[{"text":"...","owner":"Full Name or null"}]}
+
+Rules:
+- Take the title, the date and the attendees from the notes if they are stated.
+  Do not infer a date from anything other than a date written down. Use null
+  rather than guessing.
+- Attendees are the people named as present or invited. Do not invent anyone,
+  and do not turn a company name into a person.
+- The abstract is two or three sentences. No preamble.
+- A decision is something that was settled. A question is something left open.
+  An action is something a named person committed to do.
+- Do NOT include timestamps. There is no recording to point at, and a timestamp
+  here would be a fabrication.
+- Use only what the notes say. If the notes do not cover something, leave the
+  array empty rather than filling it in from what is likely.
+
+NOTES:
+"""
+
+NOTES_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "title": {"type": "string"},
+        "date": {"type": "string"},
+        "attendees": {"type": "array", "items": {"type": "string"}},
+        "abstract": {"type": "string"},
+        "decisions": {"type": "array", "items": {
+            "type": "object", "properties": {"text": {"type": "string"}},
+            "required": ["text"]}},
+        "questions": {"type": "array", "items": {
+            "type": "object", "properties": {"text": {"type": "string"}},
+            "required": ["text"]}},
+        "actions": {"type": "array", "items": {
+            "type": "object",
+            "properties": {"text": {"type": "string"}, "owner": {"type": "string"}},
+            "required": ["text"]}},
+    },
+    "required": ["title", "abstract", "decisions", "questions", "actions"],
+}
+
+
 def _ms(stamp: str | None) -> int | None:
     if not stamp:
         return None
@@ -357,6 +408,18 @@ class GeminiBackend(Backend):
                     "Re-run this meeting to try for the whole thing.")
         return Transcript(segments=segments, model=self.model, note=note)
 
+    def digest_notes(self, text: str) -> dict:
+        """Read a set of notes. No timestamps, because there is nothing to point at."""
+        raw = self._ask([{"type": "text", "text": NOTES_PROMPT + text}],
+                        schema=NOTES_SCHEMA)
+        try:
+            payload = _json_from(raw)
+        except (ValueError, json.JSONDecodeError):
+            found = _objects_in(_unfence(raw))
+            payload = next((o for o in found if "abstract" in o), None) or {}
+        payload["_model"] = self.model
+        return _digest_from(payload)
+
     def summarise(self, transcript: Transcript) -> Summary:
         raw = self._ask([{"type": "text", "text": SUMMARISE_PROMPT + transcript.as_text()}],
                         schema=SUMMARY_SCHEMA)
@@ -387,6 +450,33 @@ class GeminiBackend(Backend):
             ],
             model=self.model,
         )
+
+
+def _digest_from(payload: dict) -> dict:
+    """The model's reading of a set of notes, with nothing invented added."""
+    def items(rows):
+        return [{"text": (r.get("text") or "").strip(), "at_ms": None}
+                for r in rows or [] if (r.get("text") or "").strip()]
+
+    date = (payload.get("date") or "").strip()
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", date or ""):
+        date = None                      # a date that is not a date is not a date
+
+    return {
+        "title": (payload.get("title") or "").strip(),
+        "date": date,
+        "attendees": [a.strip() for a in payload.get("attendees") or []
+                      if isinstance(a, str) and a.strip()][:24],
+        "summary": Summary(
+            abstract=(payload.get("abstract") or "").strip(),
+            decisions=items(payload.get("decisions")),
+            questions=items(payload.get("questions")),
+            actions=[{"text": (r.get("text") or "").strip(),
+                      "owner": (r.get("owner") or None), "at_ms": None}
+                     for r in payload.get("actions") or [] if (r.get("text") or "").strip()],
+            model=payload.get("_model", ""),
+        ),
+    }
 
 
 def get_backend() -> Backend:

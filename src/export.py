@@ -13,13 +13,22 @@ def as_markdown(data: dict) -> str:
     when = r.get("recorded_at") or r.get("created_at")
     lines = [f"# {r['title']}", ""]
 
-    stamp = " · ".join(x for x in (longdate(when), clock(when), hms(r.get("duration_ms"))) if x)
+    parts = [longdate(when)]
+    if r.get("source") != "notes":
+        parts += [clock(when), hms(r.get("duration_ms"))]
+    stamp = " · ".join(x for x in parts if x)
     if stamp:
         lines += [stamp, ""]
 
+    from_notes = r.get("source") == "notes"
+    if from_notes:
+        lines += ["> From notes, not a recording. There is no audio behind any of "
+                  "this and nothing carries a timestamp.", ""]
+
     named = [s for s in data["speakers"] if s.get("person_name")]
     if named:
-        lines += ["**Present:** " + ", ".join(s["person_name"] for s in named), ""]
+        label = "Attended" if from_notes else "Present"
+        lines += [f"**{label}:** " + ", ".join(s["person_name"] for s in named), ""]
 
     summary = data["summary"]
     if summary.get("abstract"):
@@ -27,12 +36,14 @@ def as_markdown(data: dict) -> str:
 
     if summary.get("decisions"):
         lines += ["## Decisions", ""]
-        lines += [f"- {d['text']} — `{mmss(d.get('at_ms'))}`" for d in summary["decisions"]]
+        lines += [f"- {d['text']}" + (f" — `{mmss(d['at_ms'])}`" if d.get("at_ms") is not None else "")
+                  for d in summary["decisions"]]
         lines += [""]
 
     if summary.get("questions"):
         lines += ["## Open questions", ""]
-        lines += [f"- {q['text']} — `{mmss(q.get('at_ms'))}`" for q in summary["questions"]]
+        lines += [f"- {q['text']}" + (f" — `{mmss(q['at_ms'])}`" if q.get("at_ms") is not None else "")
+                  for q in summary["questions"]]
         lines += [""]
 
     if data["actions"]:
@@ -47,10 +58,17 @@ def as_markdown(data: dict) -> str:
         lines += [""]
 
     model = summary.get("model")
-    lines += ["---",
-              f"Transcribed by {r.get('model') or 'unknown'}"
-              + (f", summarised by {model}" if model else "")
-              + ". Speaker names are assigned by hand and are not verified by the model."]
+    if from_notes:
+        lines += ["---",
+                  f"Read from {r.get('original_filename') or 'notes'} by "
+                  f"{model or 'unknown'}. Nobody recorded this meeting, so none of "
+                  "it can be checked against audio."]
+    else:
+        lines += ["---",
+                  f"Transcribed by {r.get('model') or 'unknown'}"
+                  + (f", summarised by {model}" if model else "")
+                  + ". Speaker names are assigned by hand and are not verified by "
+                    "the model."]
     return "\n".join(lines).rstrip() + "\n"
 
 

@@ -562,3 +562,145 @@ def test_two_different_warnings_about_one_recording_both_survive():
 
     assert "cut off" in out.note, "the truncation warning must survive"
     assert "ffprobe" in out.note, "the unmeasurable warning must survive"
+
+
+# ------------------------------------------------ a meeting that was not recorded
+GEMINI_NOTES = """LEAF team weekly connect
+
+Aug 31, 2026
+
+Invited: Joseph Kudia, Luigi Guadagno, Jacob Kozik, Yahya Shafique
+
+Summary
+
+Software development planning and framework licensing with system architecture
+discussions.
+
+Software Development And Alignment
+
+Leaf Pie Flasher repository launched for Windows users with safety filtering.
+Project alignment achieved for weekly planning and setup. Joseph agreed to
+circulate the flasher build notes before Friday.
+
+Licensing And Bill Of Materials
+
+The team settled on keeping the framework licence as it stands for this release.
+Luigi raised whether the bill of materials needs a separate review, which was
+left open.
+"""
+
+
+def test_a_text_file_becomes_a_meeting_not_a_library_document():
+    """Somebody else's minutes are a record of something that happened, so they
+    belong in Meetings. The Library is context that was already true."""
+    from src.ingest import notes
+    from src.db import cursor
+
+    assert notes.is_notes("LEAF weekly.txt") and notes.is_notes("notes.md")
+    assert not notes.is_notes("meeting.mp3")
+
+    stored = notes.store("LEAF team weekly connect.txt", GEMINI_NOTES.encode())
+    assert stored["kind"] == "notes" and not stored["duplicate"]
+    assert stored["title"] == "LEAF team weekly connect", "the heading is the title"
+
+    with cursor() as conn:
+        row = conn.execute("SELECT source, status, source_text, audio_path, duration_ms "
+                           "FROM recordings WHERE id = ?", (stored["id"],)).fetchone()
+    assert row["source"] == "notes"
+    assert row["status"] == "queued", "it goes through the same worker"
+    assert row["audio_path"] is None and row["source_text"]
+
+    again = notes.store("copy of the same.txt", GEMINI_NOTES.encode())
+    assert again["duplicate"] and again["id"] == stored["id"]
+
+    with cursor() as conn:
+        conn.execute("DELETE FROM recordings WHERE id = ?", (stored["id"],))
+
+
+def test_something_too_short_is_sent_to_the_library_instead():
+    from src.ingest import notes
+    from src.library import Rejected
+    try:
+        notes.store("scrap.txt", b"remember to ask about the licence")
+        raise AssertionError("should have been refused")
+    except Rejected as exc:
+        assert "Library" in str(exc), "the refusal must say where it does belong"
+
+
+def test_notes_produce_a_readable_meeting_with_no_invented_timestamps():
+    """Every claim from a recording carries the moment it came from. Notes have no
+    moments, and inventing one would be a fabrication dressed as evidence."""
+    from src.ingest import notes
+    from src.pipeline import runner
+    from src.pipeline.base import Summary
+    from src.db import cursor
+
+    class Reader:
+        """Stands in for the model: reads the notes, returns no timestamps."""
+        seen = []
+
+        def transcribe(self, path, mime):
+            raise RuntimeError("not this one")
+
+        def digest_notes(self, text):
+            self.seen.append(text)
+            return {
+                "title": "LEAF team weekly connect",
+                "date": "2026-08-31",
+                "attendees": ["Joseph Kudia", "Luigi Guadagno", "Jacob Kozik",
+                              "Yahya Shafique"],
+                "summary": Summary(
+                    abstract="Planning, licensing and architecture.",
+                    decisions=[{"text": "Keep the framework licence as it stands.",
+                                "at_ms": None}],
+                    questions=[{"text": "Does the bill of materials need its own review?",
+                                "at_ms": None}],
+                    actions=[{"text": "Circulate the flasher build notes",
+                              "owner": "Joseph Kudia", "at_ms": None}],
+                    model="test"),
+            }
+
+    stored = notes.store("LEAF team weekly connect.txt", GEMINI_NOTES.encode())
+
+    # The worker claims the oldest queued recording, and earlier tests leave
+    # their own behind. Keep going until it reaches this one.
+    result = None
+    for _ in range(20):
+        result = runner.process_one(backend=Reader())
+        if result is None or result["id"] == stored["id"]:
+            break
+    assert result and result["id"] == stored["id"]
+    assert result["status"] == "ready" and result["kind"] == "notes"
+
+    from src import meetings as repo
+    data = repo.detail(stored["id"])
+    assert any("Leaf Pie Flasher" in t for t in Reader.seen), \
+        "the worker must pass the notes through to the reader"
+    assert data["recording"]["source"] == "notes"
+    assert data["recording"]["recorded_at"].startswith("2026-08-31")
+    assert data["recording"]["duration_ms"] is None, "notes have no duration"
+    assert data["recording"]["note"] and "no audio" in data["recording"]["note"]
+
+    assert data["segments"], "the notes themselves are readable in the app"
+    assert all(s["start_ms"] is None for s in data["segments"])
+    assert any("Leaf Pie Flasher" in s["text"] for s in data["segments"])
+
+    for claim in data["summary"]["decisions"] + data["summary"]["questions"]:
+        assert claim["at_ms"] is None, "a timestamp here would be invented"
+    assert [a["at_ms"] for a in data["actions"]] == [None]
+
+    names = sorted(s["person_name"] for s in data["speakers"])
+    assert names == ["Jacob Kozik", "Joseph Kudia", "Luigi Guadagno", "Yahya Shafique"]
+    assert all(s["turns"] == 0 for s in data["speakers"]), \
+        "attending is not the same claim as having spoken"
+
+    with cursor() as conn:
+        conn.execute("DELETE FROM recordings WHERE id = ?", (stored["id"],))
+
+
+def test_a_date_the_model_did_not_read_is_not_invented():
+    from src.pipeline.gemini import _digest_from
+    assert _digest_from({"date": "not stated"})["date"] is None
+    assert _digest_from({"date": "August"})["date"] is None
+    assert _digest_from({"date": "2026-08-31"})["date"] == "2026-08-31"
+    assert _digest_from({})["date"] is None

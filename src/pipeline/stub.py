@@ -30,6 +30,23 @@ class StubBackend(Backend):
             cursor_ms += duration + 800
         return Transcript(segments=segments, model="stub")
 
+    def digest_notes(self, text: str) -> dict:
+        first = next((line.strip() for line in text.splitlines() if line.strip()), "Notes")
+        return {
+            "title": first[:80],
+            "date": None,
+            "attendees": [],
+            "summary": Summary(
+                abstract=("Placeholder reading of a set of notes. The stub does "
+                          "not read; it produces the same shape every time."),
+                decisions=[{"text": "A decision the stub always reports.", "at_ms": None}],
+                questions=[],
+                actions=[{"text": "An action the stub always reports.",
+                          "owner": None, "at_ms": None}],
+                model="stub",
+            ),
+        }
+
     def summarise(self, transcript: Transcript) -> Summary:
         first = transcript.segments[0].start_ms if transcript.segments else 0
         return Summary(

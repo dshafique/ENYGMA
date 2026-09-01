@@ -201,6 +201,9 @@ h3 { font-size: 15px; font-weight: 600; margin: 0; }
 .pill.transcribing { color: var(--warn); } .pill.transcribing .dot { background: var(--warn); }
 .pill.queued { color: var(--text-muted); } .pill.queued .dot { background: var(--text-muted); }
 .pill.failed { color: var(--danger); } .pill.failed .dot { background: var(--danger); }
+/* A meeting with no recording behind it. Marked, not hidden. */
+.pill.notes { color: var(--text-dim); border-style: dashed; }
+.pill.notes .dot { background: var(--text-dim); }
 
 .stamp { font-family: var(--font-mono); font-size: 11px; color: var(--text-dim);
          background: var(--surface-high); border: 1px solid var(--border-rest);
