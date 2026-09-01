@@ -116,3 +116,32 @@ def test_the_phone_is_told_that_return_is_safe():
             / "src/templates/chat.html").read_text()
     assert "composer-hint" in html
     assert "Return starts a new line" in html
+
+
+def test_the_installer_does_not_call_a_live_pipeline_a_stub():
+    """It ended by telling him the pipeline was still the stub while its own env
+    report, four lines above, showed gemini and a key. Advice that contradicts
+    the evidence on the same screen is how a working install gets 'fixed'."""
+    import subprocess, tempfile, os
+    root = pathlib.Path(__file__).resolve().parent.parent
+    script = (root / "deploy/install-on-spark.sh").read_text()
+    block = script[script.index("PIPELINE_NOW="):script.index("cat <<EOF")]
+
+    def decide(env_text: str) -> str:
+        tmp = pathlib.Path(tempfile.mkdtemp())
+        (tmp / ".env").write_text(env_text)
+        out = subprocess.run(
+            ["bash", "-c", f'APP_DIR="{tmp}"\n{block}\nprintf "%s" "$PIPELINE_STEP"'],
+            capture_output=True, text=True)
+        assert out.returncode == 0, out.stderr
+        return out.stdout
+
+    live = decide("ENYGMA_PIPELINE=gemini\nENYGMA_GEMINI_API_KEY=AIzaSyNotARealKey\n")
+    assert "still the stub" not in live and "the stub" not in live
+    assert "Nothing to change" in live
+
+    keyless = decide("ENYGMA_PIPELINE=gemini\nENYGMA_GEMINI_API_KEY=\n")
+    assert "empty" in keyless, keyless
+
+    stub = decide("ENYGMA_PIPELINE=stub\n")
+    assert "the stub" in stub and "ENYGMA_PIPELINE=gemini" in stub

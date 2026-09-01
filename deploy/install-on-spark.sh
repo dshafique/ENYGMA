@@ -190,6 +190,30 @@ for OTHER in arkhm nobody; do
 done
 [ "$ISOLATION_OK" -eq 1 ] && note "no other account can read the database, the audio or the secret"
 
+# What is left to do depends on what is actually in the .env, not on what was
+# true the day this script was written. Printing "the pipeline is still the stub"
+# at an install that is demonstrably running on gemini invites him to break a
+# working configuration to fix a problem he does not have.
+PIPELINE_NOW=$(sed -n 's/^ENYGMA_PIPELINE=//p' "$APP_DIR/.env" 2>/dev/null | tail -1)
+KEY_NOW=$(sed -n 's/^ENYGMA_GEMINI_API_KEY=//p' "$APP_DIR/.env" 2>/dev/null | tail -1)
+
+if [ "$PIPELINE_NOW" = "gemini" ] && [ -n "$KEY_NOW" ]; then
+  PIPELINE_STEP="3) The real pipeline is on: ENYGMA_PIPELINE=gemini with a key set.
+   Transcripts are real, and they cost money. Nothing to change."
+elif [ "$PIPELINE_NOW" = "gemini" ]; then
+  PIPELINE_STEP="3) ENYGMA_PIPELINE=gemini but ENYGMA_GEMINI_API_KEY is empty, so every
+   transcription will fail. Put the key in /home/enygma/app/.env, then:
+   sudo systemctl restart enygma"
+else
+  PIPELINE_STEP="3) The transcript pipeline is the stub: every transcript is placeholder
+   text. Switch it in /home/enygma/app/.env when the key is ready:
+
+       ENYGMA_PIPELINE=gemini
+       ENYGMA_GEMINI_API_KEY=...
+
+   then: sudo systemctl restart enygma"
+fi
+
 cat <<EOF
 
 $(printf '\033[32mENYGMA is running on 127.0.0.1:%s\033[0m' "$PORT")
@@ -208,13 +232,7 @@ Next, in order.
 2) Open https://enygma.arkhm.io and create a passkey. The first device to enrol
    becomes the owner, so do this on the phone if the phone is the main device.
 
-3) The transcript pipeline is still the stub: every transcript is placeholder
-   text. Switch it in /home/enygma/app/.env when the key is ready:
-
-       ENYGMA_PIPELINE=gemini
-       ENYGMA_GEMINI_API_KEY=...
-
-   then: sudo systemctl restart enygma
+$PIPELINE_STEP
 
 The ingress rule and the DNS record for enygma.arkhm.io already exist. If the
 hostname ever stops resolving, deploy/dns-record.sh prints what it should be.
