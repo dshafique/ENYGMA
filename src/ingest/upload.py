@@ -41,6 +41,70 @@ def check(filename: str, size_bytes: int | None = None) -> str:
     return config.ALLOWED_AUDIO[suffix]
 
 
+def _write(filename: str, stream) -> tuple[Path, str, int, str]:
+    """Stream to disk, hashing on the way. Returns (path, sha, bytes, mime)."""
+    mime = check(filename)
+    suffix = Path(filename).suffix.lower()
+    UPLOADS.mkdir(parents=True, exist_ok=True)
+
+    digest = hashlib.sha256()
+    tmp = UPLOADS / f".incoming-{id(stream):x}{suffix}"
+    total = 0
+    limit = config.MAX_UPLOAD_MB * 1024 * 1024
+    try:
+        with tmp.open("wb") as out:
+            while True:
+                chunk = stream.read(CHUNK)
+                if not chunk:
+                    break
+                total += len(chunk)
+                if total > limit:
+                    raise Rejected(f"That file is over the {config.MAX_UPLOAD_MB} MB limit.")
+                digest.update(chunk)
+                out.write(chunk)
+        if total == 0:
+            raise Rejected("That file is empty.")
+        sha = digest.hexdigest()
+        final = UPLOADS / f"{sha[:16]}{suffix}"
+        tmp.replace(final)
+        return final, sha, total, mime
+    finally:
+        tmp.unlink(missing_ok=True)
+
+
+def attach(recording_id: int, filename: str, stream) -> dict:
+    """Give an existing meeting the recording it was missing.
+
+    A meeting added from somebody else's notes is a placeholder for one nobody
+    recorded. When the audio turns up afterwards, dropping it in the normal way
+    would make a second, separate meeting for the same hour. This puts it on the
+    one that already exists and queues it, so the transcript replaces the notes
+    rather than sitting beside them.
+    """
+    filename = Path(filename.replace("\\", "/")).name
+    final, sha, total, mime = _write(filename, stream)
+
+    with cursor() as conn:
+        row = conn.execute("SELECT id, source, audio_path FROM recordings WHERE id = ?",
+                           (recording_id,)).fetchone()
+        if row is None:
+            raise Rejected("That meeting does not exist.")
+        if row["audio_path"]:
+            raise Rejected("That meeting already has a recording.")
+        clash = conn.execute(
+            "SELECT id, title FROM recordings WHERE sha256 = ? AND id <> ?",
+            (sha, recording_id)).fetchone()
+        if clash:
+            raise Rejected(
+                f"That exact recording is already here, as \u201c{clash['title']}\u201d. "
+                "Nothing was changed.")
+        conn.execute(
+            "UPDATE recordings SET audio_path = ?, mime = ?, bytes = ?, sha256 = ?, "
+            " status = 'queued', failure = NULL, note = NULL WHERE id = ?",
+            (final.relative_to(BASE_DIR).as_posix(), mime, total, sha, recording_id))
+    return {"id": recording_id, "bytes": total, "queued": True}
+
+
 def store(filename: str, stream) -> dict:
     """Write the stream to disk, hashing as it goes.
 

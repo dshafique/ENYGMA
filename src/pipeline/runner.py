@@ -99,12 +99,21 @@ def _write_results(recording_id: int, transcript, summary) -> None:
                     "INSERT INTO action_items (recording_id, text, owner, at_ms) VALUES (?, ?, ?, ?)",
                     (recording_id, action["text"], action.get("owner"), action.get("at_ms")),
                 )
+            was_notes = conn.execute(
+                "SELECT source_text FROM recordings WHERE id = ?",
+                (recording_id,)).fetchone()["source_text"]
             last = transcript.segments[-1] if transcript.segments else None
             conn.execute(
                 "UPDATE recordings SET status = 'ready', transcribed_at = datetime('now'), "
                 "model = ?, duration_ms = COALESCE(duration_ms, ?), note = ? WHERE id = ?",
                 (transcript.model, (last.end_ms if last else None),
-                 getattr(transcript, "note", None), recording_id),
+                 " ".join(x for x in (
+                     getattr(transcript, "note", None),
+                     ("This meeting started as notes. The recording arrived "
+                      "afterwards, and this transcript is from the audio; the "
+                      "original notes are still on the Notes tab."
+                      ) if was_notes else None) if x) or None,
+                 recording_id),
             )
             conn.execute("COMMIT")
         except Exception:
@@ -118,7 +127,9 @@ def process_one(backend=None) -> dict | None:
         return None
     backend = backend or get_backend()
     try:
-        if job.get("source") == "notes":
+        # Audio wins when a meeting has both: a transcript with timestamps is
+        # strictly better than notes about the same hour, and the notes are kept.
+        if not job.get("audio_path") and job.get("source_text"):
             return _process_notes(job, backend)
         path = BASE_DIR / job["audio_path"]
         transcript = backend.transcribe(path, job["mime"] or "audio/mpeg")

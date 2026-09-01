@@ -238,6 +238,39 @@ async function send(url, init) {
   }
 }
 
+/* --------------------------------- the recording arrived after the notes */
+{
+  const zone = $("#attach");
+  const input = $("#attachfile");
+  const queue = $("#attachqueue");
+  if (zone && input && queue) {
+    const stop = (e) => { e.preventDefault(); e.stopPropagation(); };
+    ["dragenter", "dragover"].forEach((k) =>
+      zone.addEventListener(k, (e) => { stop(e); zone.classList.add("over"); }));
+    ["dragleave", "drop"].forEach((k) =>
+      zone.addEventListener(k, (e) => { stop(e); zone.classList.remove("over"); }));
+    zone.addEventListener("drop", (e) => attach(e.dataTransfer.files));
+    input.addEventListener("change", () => attach(input.files));
+
+    async function attach(files) {
+      if (!files || !files.length) return;
+      const body = new FormData();
+      body.append("files", files[0]);
+      const line = (t, bad) =>
+        `<div class="q"><span>${files[0].name}</span><span class="${bad ? "danger" : "muted"}">${t}</span></div>`;
+      queue.innerHTML = line("sending");
+      try {
+        const res = await send(`/meetings/${queue.dataset.id}/audio`,
+                               { method: "POST", body });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) { queue.innerHTML = line(data.detail || `rejected (${res.status})`, true); return; }
+        queue.innerHTML = line("queued, transcribing now");
+        setTimeout(() => location.reload(), 1200);
+      } catch (err) { queue.innerHTML = line(String(err), true); }
+    }
+  }
+}
+
 /* ------------------------------------------------------- action items */
 /* Four states, not a checkbox. Declining something and not having got to it are
    different answers, and the list is only worth reading if it can tell them

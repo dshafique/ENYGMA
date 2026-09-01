@@ -395,6 +395,22 @@ def meeting_markdown(recording_id: int, request: Request):
     return Response(as_markdown(data), media_type="text/markdown; charset=utf-8")
 
 
+@app.post("/meetings/{recording_id}/audio")
+async def attach_audio(recording_id: int, request: Request,
+                       files: list[UploadFile] = File(...)):
+    """The recording turned up after the notes did."""
+    require_session(request)
+    if not files:
+        raise HTTPException(status_code=400, detail="No file")
+    item = files[0]
+    try:
+        return upload.attach(recording_id, item.filename, item.file)
+    except upload.Rejected as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    finally:
+        await item.close()
+
+
 @app.get("/meetings/{recording_id}/audio")
 def meeting_audio(recording_id: int, request: Request):
     require_view(request)

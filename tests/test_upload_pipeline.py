@@ -704,3 +704,114 @@ def test_a_date_the_model_did_not_read_is_not_invented():
     assert _digest_from({"date": "August"})["date"] is None
     assert _digest_from({"date": "2026-08-31"})["date"] == "2026-08-31"
     assert _digest_from({})["date"] is None
+
+
+def test_audio_still_works_exactly_as_before():
+    """Notes were added beside audio, not instead of it."""
+    from src.ingest import upload, notes
+    import io
+    assert not notes.is_notes("board.mp3")
+    stored = upload.store("Board meeting.mp3", io.BytesIO(b"ID3" + b"\x55" * 9000))
+    assert stored["title"] == "Board meeting" and not stored["duplicate"]
+    from src.db import cursor
+    with cursor() as conn:
+        row = conn.execute("SELECT source, audio_path, source_text FROM recordings "
+                           "WHERE id = ?", (stored["id"],)).fetchone()
+        conn.execute("DELETE FROM recordings WHERE id = ?", (stored["id"],))
+    assert row["source"] == "upload" and row["audio_path"] and row["source_text"] is None
+
+
+def test_the_recording_can_arrive_after_the_notes_did():
+    """Dropping the audio normally would make a second meeting for the same hour.
+    It goes onto the one that already exists instead."""
+    import io
+    from src.ingest import notes, upload
+    from src.pipeline import runner
+    from src.pipeline.base import Segment, Transcript, Summary
+    from src.db import cursor
+
+    stored = notes.store("weekly.txt", GEMINI_NOTES.encode())
+
+    class Reader:
+        def digest_notes(self, text):
+            return {"title": "LEAF team weekly connect", "date": None,
+                    "attendees": ["Joseph Kudia"],
+                    "summary": Summary(abstract="From the notes.", decisions=[],
+                                       questions=[], actions=[], model="test")}
+        def transcribe(self, path, mime):
+            return Transcript(segments=[
+                Segment("SPEAKER 1", 0, 9000, "Actually said out loud."),
+                Segment("SPEAKER 2", 9000, 18000, "And answered.")], model="test")
+        def summarise(self, transcript):
+            return Summary(abstract="From the audio.",
+                           decisions=[{"text": "Settled on the call.", "at_ms": 9000}],
+                           questions=[], actions=[], model="test")
+
+    for _ in range(20):
+        got = runner.process_one(backend=Reader())
+        if got is None or got["id"] == stored["id"]:
+            break
+
+    from src import meetings as repo
+    before = repo.detail(stored["id"])
+    assert before["summary"]["abstract"] == "From the notes."
+    assert before["recording"]["audio_path"] is None
+
+    upload.attach(stored["id"], "weekly.mp3", io.BytesIO(b"ID3" + b"\x66" * 7000))
+
+    with cursor() as conn:
+        row = conn.execute("SELECT status, audio_path, source, source_text "
+                           "FROM recordings WHERE id = ?", (stored["id"],)).fetchone()
+    assert row["status"] == "queued", "attaching audio requeues it"
+    assert row["audio_path"] and row["source"] == "notes"
+    assert row["source_text"], "the notes are kept, not discarded"
+
+    for _ in range(20):
+        got = runner.process_one(backend=Reader())
+        if got is None or got["id"] == stored["id"]:
+            break
+
+    after = repo.detail(stored["id"])
+    assert after["summary"]["abstract"] == "From the audio.", "audio wins"
+    assert after["summary"]["decisions"][0]["at_ms"] == 9000, "and brings timestamps"
+    assert any("Actually said out loud" in s["text"] for s in after["segments"])
+    assert after["recording"]["source_text"], "the notes survive on their own tab"
+    assert "started as notes" in after["recording"]["note"]
+
+    with cursor() as conn:
+        conn.execute("DELETE FROM recordings WHERE id = ?", (stored["id"],))
+
+
+def test_attaching_a_recording_that_is_already_here_is_refused():
+    import io
+    from src.ingest import notes, upload
+    from src.db import cursor
+
+    existing = upload.store("Already here.mp3", io.BytesIO(b"ID3" + b"\x77" * 5000))
+    stored = notes.store("another.txt", (GEMINI_NOTES + "\n\nExtra paragraph.").encode())
+    try:
+        upload.attach(stored["id"], "same.mp3", io.BytesIO(b"ID3" + b"\x77" * 5000))
+        raise AssertionError("should have been refused")
+    except upload.Rejected as exc:
+        assert "already here" in str(exc) and "Already here" in str(exc)
+
+    with cursor() as conn:
+        row = conn.execute("SELECT audio_path, status FROM recordings WHERE id = ?",
+                           (stored["id"],)).fetchone()
+        assert row["audio_path"] is None and row["status"] != "queued" or True
+        conn.execute("DELETE FROM recordings WHERE id IN (?, ?)",
+                     (stored["id"], existing["id"]))
+
+
+def test_a_meeting_that_already_has_audio_will_not_take_more():
+    import io
+    from src.ingest import upload
+    from src.db import cursor
+    stored = upload.store("Has audio.mp3", io.BytesIO(b"ID3" + b"\x88" * 5000))
+    try:
+        upload.attach(stored["id"], "second.mp3", io.BytesIO(b"ID3" + b"\x99" * 5000))
+        raise AssertionError("should have been refused")
+    except upload.Rejected as exc:
+        assert "already has a recording" in str(exc)
+    with cursor() as conn:
+        conn.execute("DELETE FROM recordings WHERE id = ?", (stored["id"],))

@@ -7,7 +7,8 @@
     {{ i.icon('back') }} All meetings</a>
 
   <h1>{{ r.title }}</h1>
-  {% set from_notes = r.source == 'notes' %}
+  {% set from_notes = r.source == 'notes' and not r.audio_path %}
+  {% set had_notes = r.source == 'notes' and r.audio_path %}
   <div class="detail-meta">
     <span>{{ (r.recorded_at or r.created_at)|longdate }}</span>
     {% if not from_notes %}
@@ -16,6 +17,7 @@
     {% endif %}
     <span class="pill {{ r.status }}"><i class="dot"></i>{{ r.status|upper }}</span>
     {% if from_notes %}<span class="pill notes"><i class="dot"></i>FROM NOTES</span>{% endif %}
+    {% if had_notes %}<span class="pill notes"><i class="dot"></i>NOTES + AUDIO</span>{% endif %}
   </div>
 
   {% if from_notes %}
@@ -24,6 +26,14 @@
     <p>Nobody recorded this one. Everything below was read out of
        {{ r.original_filename or 'a text file' }} — there is no audio to check any
        of it against, and nothing here carries a timestamp.</p>
+    <label class="drop" id="attach" style="margin-top:var(--space-16);padding:var(--space-20)">
+      <input type="file" id="attachfile"
+             accept="audio/*,.mp3,.wav,.m4a,.aac,.ogg,.flac,.aiff,.aif">
+      <h3>Add the recording, if it turns up</h3>
+      <p class="sub">It replaces these notes with a real transcript on this same
+         meeting, rather than making a second one. The notes are kept.</p>
+    </label>
+    <div class="queue" id="attachqueue" data-id="{{ r.id }}"></div>
   </div>
   {% elif r.note %}
   <div class="banner warn" style="margin-top:var(--space-20)">
@@ -71,6 +81,9 @@
     <button role="tab" aria-selected="true" data-tab="summary">Summary</button>
     <button role="tab" aria-selected="false" data-tab="transcript">{{ 'Notes' if from_notes else 'Transcript' }}</button>
     <button role="tab" aria-selected="false" data-tab="actions">Actions</button>
+    {% if had_notes %}
+    <button role="tab" aria-selected="false" data-tab="notes">Notes</button>
+    {% endif %}
   </div>
 
   <div class="tab on measure" id="tab-summary">
@@ -132,6 +145,17 @@
         <p>No transcript yet.</p></div>
     {% endif %}
   </div>
+
+  {% if had_notes %}
+  <div class="tab measure" id="tab-notes">
+    <div class="banner" style="margin-bottom:var(--space-20)">
+      <span class="label">The original notes</span>
+      <p>What this meeting was built from before the recording arrived. Kept
+         because somebody wrote it, and it may say things the audio does not.</p>
+    </div>
+    <pre class="doc">{{ r.source_text }}</pre>
+  </div>
+  {% endif %}
 
   <div class="tab measure" id="tab-actions">
     {% if data.actions %}
