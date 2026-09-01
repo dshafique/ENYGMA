@@ -102,6 +102,11 @@ class Config:
     CHUNK_OVERLAP_SECONDS = int(os.environ.get("ENYGMA_CHUNK_OVERLAP_SECONDS", "90"))
     WORKER_POLL_SECONDS = float(os.environ.get("ENYGMA_WORKER_POLL_SECONDS", "3"))
 
+    # Friday, local, on a 24-hour clock. Mid-afternoon rather than end of day:
+    # the note is meant to be read and edited before he leaves, not found on
+    # Monday morning describing a week he has stopped thinking about.
+    WEEKNOTE_HOUR = int(os.environ.get("ENYGMA_WEEKNOTE_HOUR", "15"))
+
     # HiNotes. The base URL is not in the handoff; lift it from PHNTM's
     # src/hinotes/ module rather than guessing, and confirm before first pull.
     HINOTES_BASE = os.environ.get("ENYGMA_HINOTES_BASE", "").rstrip("/")

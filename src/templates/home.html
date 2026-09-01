@@ -14,6 +14,50 @@
 
 <div class="page grid two">
 
+  {% if week_note %}
+  <div class="card weeknote span-two" id="weeknote" data-week="{{ week_note.week_start }}">
+    <div class="card-head">
+      <h2>Your week</h2>
+      <span class="label">{{ week_note.range }}</span>
+    </div>
+
+    {% if week_note.empty %}
+      <p class="dim">Nothing to write up for this week. No meetings, no actions
+        closed, nothing added. This stays empty rather than inventing a week you
+        did not have.</p>
+    {% else %}
+      <p class="dim wn-intro">Ready to send. Read it before you do, and change
+        anything that is not right.{% if week_note.edited %}
+        <span class="label">Edited by you</span>{% endif %}</p>
+
+      <div class="wn-body" id="wn-body" data-edited="{{ 1 if week_note.edited else 0 }}">
+        {% if week_note.done %}
+        <section data-part="done">
+          <h3 class="label">What I got done this week</h3>
+          <ul>{% for line in week_note.done %}<li>{{ line }}</li>{% endfor %}</ul>
+        </section>
+        {% endif %}
+        {% if week_note.next %}
+        <section data-part="next">
+          <h3 class="label">What I am working on next week</h3>
+          <ul>{% for line in week_note.next %}<li>{{ line }}</li>{% endfor %}</ul>
+        </section>
+        {% endif %}
+      </div>
+
+      <p class="wn-from">Built from {{ week_note.drawn_from }}.
+        <a href="/meetings">Check the week</a></p>
+
+      <div class="spread wn-actions">
+        <button class="btn sm" id="wn-copy">Copy</button>
+        <button class="btn line sm" id="wn-edit">Edit</button>
+        <button class="btn ghost sm" id="wn-again">Write it again</button>
+        <span class="msg dim" id="wn-msg"></span>
+      </div>
+    {% endif %}
+  </div>
+  {% endif %}
+
   <a class="card link" href="/meetings">
     <div class="card-head"><h2>Meetings</h2><span class="label">{{ d.counts.total }} total</span></div>
     {% if d.recent %}

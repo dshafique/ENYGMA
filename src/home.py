@@ -42,3 +42,10 @@ def dashboard() -> dict:
         "open_action_count": len(open_actions),
         "action_counts": action_counts,
     }
+
+
+def week_note() -> dict | None:
+    """The most recent Friday note, if there is one. Home only reads; the worker
+    is what writes, so opening the page never costs a model call."""
+    from . import weeknote
+    return weeknote.latest()

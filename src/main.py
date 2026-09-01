@@ -22,6 +22,7 @@ from .auth import session, passkeys, attempts, secrets_store
 from .ingest import poller, upload, notes as notes_ingest
 from .pipeline import runner
 from .export import as_markdown
+from . import weeknote
 from . import (library, meetings as meetings_repo, actions as actions_repo,
                directory as directory_repo, chat as chat_repo, glossary,
                home as home_repo, fmt)
@@ -116,6 +117,7 @@ def index(request: Request):
         handle = conn.execute("SELECT handle FROM operator WHERE id = 1").fetchone()
     return page(request, "home.html", "home", {
         "d": home_repo.dashboard(),
+        "week_note": home_repo.week_note(),
         "greeting": _greeting(),
         "handle": (handle["handle"] if handle else "there").title(),
         "today": datetime.now().strftime("%A %-d %B").upper(),
@@ -639,6 +641,48 @@ async def chat_say(thread_id: int, request: Request):
         return RedirectResponse(f"/chat/{thread_id}", status_code=303)
     chat_repo.say(thread_id, body)
     return RedirectResponse(f"/chat/{thread_id}", status_code=303)
+
+
+# --------------------------------------------------------------------------
+# the Friday note
+# --------------------------------------------------------------------------
+@app.post("/week/{week_start}/again")
+def week_again(week_start: str, request: Request):
+    """Write it again. A deliberate re-roll, so his edit is what he is replacing."""
+    require_session(request)
+    from datetime import date as _date
+    try:
+        monday = _date.fromisoformat(week_start)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Not a date")
+    return {"note": weeknote.write(monday, keep_edit=False)}
+
+
+@app.post("/week/{week_start}/edit")
+async def week_edit(week_start: str, request: Request):
+    """His version of the note. Kept beside the generated one, never on top."""
+    require_session(request)
+    body = await request.json()
+    if weeknote.stored_exists(week_start) is False:
+        raise HTTPException(status_code=404, detail="No note for that week")
+    return {"note": weeknote.save_edit(week_start,
+                                       body.get("done") or [],
+                                       body.get("next") or [])}
+
+
+@app.get("/week/{week_start}/text")
+def week_text(week_start: str, request: Request):
+    """The note as it would land in an email. The clipboard reads this rather
+    than scraping the page, so what he pastes is what was stored."""
+    require_session(request)
+    from datetime import date as _date
+    try:
+        note = weeknote.stored(_date.fromisoformat(week_start))
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Not a date")
+    if note is None:
+        raise HTTPException(status_code=404, detail="No note for that week")
+    return {"text": weeknote.as_email(note)}
 
 
 # --------------------------------------------------------------------------

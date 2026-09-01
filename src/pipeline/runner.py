@@ -200,10 +200,39 @@ def drain(limit: int = 100, backend=None) -> list[dict]:
     return out
 
 
+# The Friday note rides on this thread rather than getting a scheduler of its
+# own. It is checked only when the queue is empty, and at most once every few
+# minutes, so it can never delay a transcription or hammer the model.
+_WEEKNOTE_EVERY = 300.0
+_last_weeknote_check = 0.0
+
+
+def _maybe_weeknote() -> None:
+    """Write the week's note if a finished week is missing one.
+
+    Deliberately not driven by a clock alarm: the Spark can be asleep at three on
+    a Friday, and an alarm that fires into a sleeping machine writes nothing and
+    says nothing. Asking "is there a finished week without a note" instead means
+    a missed Friday becomes a note waiting for him on Sunday.
+    """
+    global _last_weeknote_check
+    now = time.monotonic()
+    if now - _last_weeknote_check < _WEEKNOTE_EVERY:
+        return
+    _last_weeknote_check = now
+    from .. import weeknote
+    written = weeknote.write_if_due()
+    if written:
+        print(f"wrote the week note for {written['week_start']}")
+
+
 def _loop() -> None:
     while not _stop.is_set():
         try:
             if process_one() is None:
+                # Only when there is no transcription waiting: his audio is the
+                # thing he is standing there watching, and it goes first.
+                _maybe_weeknote()
                 _stop.wait(config.WORKER_POLL_SECONDS)
         except Exception:
             traceback.print_exc()

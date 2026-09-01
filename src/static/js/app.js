@@ -635,6 +635,71 @@ $("#retry")?.addEventListener("click", async (e) => {
   });
 }
 
+/* --------------------------------------------------------- the Friday note */
+{
+  const card = $("#weeknote");
+  const week = card?.dataset.week;
+  const bodyEl = $("#wn-body");
+  const msg = $("#wn-msg");
+  const say = (t) => { if (msg) { msg.textContent = t || "";
+                                  if (t) setTimeout(() => (msg.textContent = ""), 3000); } };
+
+  const bullets = (part) => Array.from(
+    bodyEl?.querySelectorAll(`section[data-part="${part}"] li`) || [],
+    (li) => li.textContent.trim()).filter(Boolean);
+
+  /* The text comes from the server rather than from the page, so what he pastes
+     into the email is what was actually stored, not whatever the DOM looks like
+     mid-edit. */
+  $("#wn-copy")?.addEventListener("click", async () => {
+    try {
+      const res = await fetch(`/week/${week}/text`);
+      if (!res.ok) throw new Error("not ok");
+      const { text } = await res.json();
+      await navigator.clipboard.writeText(text);
+      say("Copied");
+    } catch (e) {
+      // clipboard access is refused in a few contexts; say what to do instead.
+      say("Could not copy. Select the text and copy it by hand.");
+    }
+  });
+
+  const edit = $("#wn-edit");
+  edit?.addEventListener("click", async () => {
+    const editing = bodyEl.getAttribute("contenteditable") === "true";
+    if (!editing) {
+      bodyEl.setAttribute("contenteditable", "true");
+      edit.textContent = "Save";
+      bodyEl.focus();
+      return;
+    }
+    bodyEl.setAttribute("contenteditable", "false");
+    edit.textContent = "Edit";
+    try {
+      await post(`/week/${week}/edit`, { done: bullets("done"), next: bullets("next") });
+      say("Saved");
+    } catch (e) { say("Could not save that."); }
+  });
+
+  const again = $("#wn-again");
+  again?.addEventListener("click", async () => {
+    // Said plainly, because it is the one button here that destroys something.
+    if (bodyEl?.dataset.edited === "1" &&
+        !confirm("Writing it again replaces what you edited. Carry on?")) return;
+    again.disabled = true;
+    const was = again.textContent;
+    again.textContent = "Writing\u2026";
+    try {
+      await post(`/week/${week}/again`, {});
+      location.reload();
+    } catch (e) {
+      say("Could not write it again just now.");
+      again.disabled = false;
+      again.textContent = was;
+    }
+  });
+}
+
 /* ----------------------------------------------------------- settings */
 {
   $("#lock")?.addEventListener("click", async () => {
