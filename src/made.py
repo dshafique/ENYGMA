@@ -15,12 +15,22 @@ from . import documents, library
 from . import config as _config
 from .db import cursor
 
+# Under data/, not beside it.
+#
+# The service runs with ProtectSystem=strict and ProtectHome=read-only, and
+# deploy/enygma.service lists exactly two writable paths: app/data and
+# app/uploads. A sibling directory is read-only at the kernel level however the
+# file permissions look, which is how the first version of this shipped and then
+# failed on the Spark with "[Errno 30] Read-only file system" the moment he
+# asked for a file. Living under data/ also means the nightly backup already
+# carries these, and the isolation check already covers them.
+#
 # Module level and read at call time, the same way src/ingest/upload.py does it,
-# so a test (or a relocated data directory) can move the store without the
-# stored paths and the directory disagreeing about where the root is. Binding
-# BASE_DIR at import while letting MADE be overridden is how that goes wrong.
+# so a test can move the store without the stored paths and the directory
+# disagreeing about where the root is.
 BASE_DIR = _config.BASE_DIR
-MADE = BASE_DIR / "made"
+DATA_DIR = _config.DATA_DIR
+MADE = DATA_DIR / "made"
 
 
 def _store(data: bytes, fmt: str) -> tuple[str, str]:

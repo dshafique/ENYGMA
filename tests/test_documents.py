@@ -279,3 +279,47 @@ def test_pressing_send_does_not_move_the_send_button():
     assert '"focusout"' in chat and '"focusin"' in chat
     assert "composer.contains(document.activeElement)" in chat
     assert 'body?.addEventListener("blur"' not in chat, "back to blurring on the box"
+
+
+def test_nothing_is_stored_outside_a_path_systemd_makes_writable():
+    """The bug this exists for: made documents were stored in app/made, a new
+    directory beside data/ rather than inside it. The unit runs with
+    ProtectSystem=strict and ProtectHome=read-only and grants exactly two
+    writable paths, so that directory was read-only at the kernel level whatever
+    its permissions said. Every test passed. It failed on the Spark the first
+    time he asked for a file, with Errno 30.
+
+    No runtime test could catch it: the suite runs in a temp directory with no
+    sandbox, and it moves these very paths to get there. So this reads the
+    source instead and asks a structural question -- does any module hang a
+    store off BASE_DIR that the unit has not made writable.
+    """
+    import re
+    root = pathlib.Path(__file__).resolve().parent.parent
+
+    granted = []
+    for line in (root / "deploy/enygma.service").read_text().splitlines():
+        if line.startswith("ReadWritePaths="):
+            granted += line.split("=", 1)[1].split()
+    assert granted, "the unit grants no writable paths at all"
+    # What the granted paths are called, relative to the app directory.
+    writable = {pathlib.PurePosixPath(g).name for g in granted}
+    assert {"data", "uploads"} <= writable, granted
+
+    offenders = []
+    for path in sorted((root / "src").rglob("*.py")):
+        for n, line in enumerate(path.read_text().splitlines(), 1):
+            # A store declared straight off the application root.
+            found = re.search(r'^\s*\w+\s*=\s*BASE_DIR\s*/\s*"([^"]+)"', line)
+            if found and found.group(1) not in writable:
+                offenders.append(f"{path.relative_to(root)}:{n}  {line.strip()}")
+    assert not offenders, (
+        "these are written to but are read-only under the service unit:\n  "
+        + "\n  ".join(offenders)
+        + f"\nWritable: {sorted(writable)}. Put it under data/.")
+
+    # And the documents store specifically lives under data/, in the source,
+    # not merely wherever a test happened to point it.
+    made_src = (root / "src/made.py").read_text()
+    assert 'MADE = DATA_DIR / "made"' in made_src, \
+        "the made-documents store moved back out of data/"
