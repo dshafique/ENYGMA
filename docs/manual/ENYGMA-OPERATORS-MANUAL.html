@@ -97,7 +97,12 @@ section.no-break { page-break-inside: avoid; }
   background: var(--d-bg);
   color: var(--d-text);
   page-break-after: always;
-  min-height: 100vh;
+  /* Not 100vh. In print vh is the whole sheet, but the box this sits in is the
+     sheet minus the @page margins, so a divider asking for 100vh overflowed by
+     exactly those margins and pushed its last two contents lines onto a second,
+     otherwise empty page. Seven dividers, seven wasted pages, and a doubled
+     footer on each. Subtract the margins and each divider is one page again. */
+  min-height: calc(100vh - 1.7in);
   position: relative;
   padding: 1.2in 1in;
 }
@@ -376,8 +381,8 @@ ol.toc-list li.ch .num {
     <div class="cover-bot">
       <div>Author<strong>ARKHM</strong></div>
       <div>Operator<strong>Yahya</strong></div>
-      <div>Edition<strong>Mk II.7</strong></div>
-      <div>Date<strong>2026-08-27</strong></div>
+      <div>Edition<strong>Mk II.23</strong></div>
+      <div>Date<strong>2026-09-02</strong></div>
     </div>
   </div>
 </section>
@@ -387,7 +392,7 @@ ol.toc-list li.ch .num {
   <h1 class="chapter">Colophon</h1>
   <div class="chapter-meta">
     <span class="label">Front matter</span>
-    <span>Mk II.7 / 2026-08-27</span>
+    <span>Mk II.23 / 2026-09-02</span>
   </div>
 
   <p class="lede">
@@ -408,7 +413,7 @@ ol.toc-list li.ch .num {
   <dl class="specs">
     <dt>Author</dt><dd>ARKHM</dd>
     <dt>Volume</dt><dd>I, Operation</dd>
-    <dt>Edition</dt><dd>Mk II.7 | 2026-08-27</dd>
+    <dt>Edition</dt><dd>Mk II.23 | 2026-09-02</dd>
     <dt>Host</dt><dd><code>spark-4d80</code>, Ubuntu, Python 3.12</dd>
     <dt>Address</dt><dd><code>https://enygma.arkhm.io</code></dd>
     <dt>Repository</dt><dd><code>github.com/dshafique/ENYGMA</code></dd>
@@ -477,7 +482,7 @@ ol.toc-list li.ch .num {
   <h1 class="chapter">Table of Contents</h1>
   <div class="chapter-meta">
     <span class="label">Front matter</span>
-    <span>Mk II.7 / 2026-08-27</span>
+    <span>Mk II.23 / 2026-09-02</span>
   </div>
 
   <ol class="toc-list">
@@ -514,7 +519,12 @@ ol.toc-list li.ch .num {
     <li class="ch"><span class="num">17</span><span>Failure modes</span></li>
     <li class="ch"><span class="num">18</span><span>Releases, and what is still unproven</span></li>
 
-    <li class="part">Appendices</li>
+        <li class="part">Part 6 &nbsp;|&nbsp; What it writes</li>
+    <li class="ch"><span class="num">19</span><span>The Friday note</span></li>
+    <li class="ch"><span class="num">20</span><span>Documents</span></li>
+    <li class="ch"><span class="num">21</span><span>How ENYGMA writes</span></li>
+
+<li class="part">Appendices</li>
     <li class="ch"><span class="num">A</span><span>Environment variables</span></li>
     <li class="ch"><span class="num">B</span><span>HTTP surface</span></li>
     <li class="ch"><span class="num">C</span><span>Source tree map</span></li>
@@ -772,18 +782,18 @@ ol.toc-list li.ch .num {
   <div class="chapter-meta"><span class="label">Part 1 · Concept</span><span>01</span></div>
 
   <p class="lede">
-    Five destinations, one shell. A nav rail on a desktop, a tab bar on a
-    handset, and the same five places either way.
+    Six destinations, one shell. A nav rail on a desktop, a tab bar on a
+    handset, and the same six places either way.
   </p>
 
   <table>
     <tr><th>Tab</th><th>Answers</th><th>Holds</th></tr>
     <tr><td><strong>Home</strong></td><td>What should I look at now?</td>
-        <td>Recent meetings, open actions, headlines, what ENYGMA has learned, counts. Every panel is a door into another tab.</td></tr>
+        <td>The week's note when there is one, then recent meetings, open actions, headlines, what ENYGMA has learned, counts. Every panel is a door into another tab, except the note, which is the one thing here that leaves the building (Chapter 19).</td></tr>
     <tr><td><strong>Meetings</strong></td><td>What happened in this one?</td>
         <td>The list and the reader: search, status filters, day groups; then speakers, summary, transcript, actions and the audio.</td></tr>
     <tr><td><strong>Chat</strong></td><td>What does this mean?</td>
-        <td>Threads. A thread can start empty or from a word held down in a transcript, in which case the term arrives as the first question.</td></tr>
+        <td>Threads, with memory: the last twelve turns go into every answer, so a follow-up has something to follow. A thread can start empty or from a word held down in a transcript. Ask for a file here and you get a file (Chapter 20).</td></tr>
     <tr><td><strong>Action items</strong></td><td>What do I owe anybody?</td>
         <td>Every commitment across every meeting, open and done, each linking back to the moment it was said.</td></tr>
     <tr><td><strong>Directory</strong></td><td>Who is this person?</td>
@@ -1150,6 +1160,10 @@ ol.toc-list li.ch .num {
     <tr><td><code>jinja2</code></td><td>3.1.5</td><td>Server-rendered templates. No build step, no hydration, no framework.</td></tr>
     <tr><td><code>python-multipart</code></td><td>0.0.20</td><td>Required for file uploads. Without it the dropzone posts into a void.</td></tr>
     <tr><td><code>itsdangerous</code></td><td>2.2.0</td><td>Signs the session cookie with a timestamp, which is what makes the freshness window possible.</td></tr>
+    <tr><td><code>python-docx</code></td><td>1.1.2</td><td rowspan="4">The four document renderers. Every one is a pip wheel with no system package behind it, which is what keeps the install a two minute job: a renderer wanting LibreOffice or a headless browser would not survive <code>install-on-spark.sh</code> on a machine with no display. The PDF is built directly rather than printed from a browser for exactly that reason.</td></tr>
+    <tr><td><code>python-pptx</code></td><td>1.0.2</td></tr>
+    <tr><td><code>openpyxl</code></td><td>3.1.5</td></tr>
+    <tr><td><code>reportlab</code></td><td>4.2.5</td></tr>
     <tr><td><code>webauthn</code></td><td>2.5.0</td><td>Passkey registration and assertion verification. Server-side challenge handling.</td></tr>
     <tr><td><code>argon2-cffi</code></td><td>23.1.0</td><td>Argon2id for the PIN, setup codes and recovery codes. Deliberately slow.</td></tr>
     <tr><td><code>httpx</code></td><td>0.28.1</td><td>HTTP client, and the test client's transport.</td></tr>
@@ -1308,7 +1322,7 @@ cloudflared on spark-4d80
   <pre class="term"><code><span class="prompt">$</span> git clone https://github.com/dshafique/ENYGMA.git ~/enygma-release
 <span class="prompt">$</span> cd ~/enygma-release
 <span class="prompt">$</span> python3 tools/stamp_release.py
-<span class="out">Mk II.7   build 7.2026.08.27.0553</span></code></pre>
+<span class="out">Mk II.23   build 23.2026.09.02.0134</span></code></pre>
   <p>
     <code>stamp_release.py</code> writes <code>VERSION</code> and
     <code>MARK</code> from the commit count. Both are build artifacts and are not
@@ -1376,7 +1390,7 @@ No problems found.
 ==&gt; systemd
     8589934592 memory ceiling in force
 ==&gt; checks
-    healthz: {"ok":true,...,"mark":"Mk II.7"}
+    healthz: {"ok":true,...,"mark":"Mk II.23"}
     no other account can read the database, the audio or the secret</span></code></pre>
   <p>
     If the token count, the test count or the mark differ from what you expect,
@@ -1450,7 +1464,7 @@ ENYGMA_GEMINI_API_KEY=AIza...</code></pre>
   <pre class="term"><code><span class="prompt">$</span> systemctl is-active enygma
 <span class="out">active</span>
 <span class="prompt">$</span> curl -s https://enygma.arkhm.io/healthz
-<span class="out">{"ok":true,"app":"enygma","port":4073,"version":"7.2026.08.27.0553","mark":"Mk II.7"}</span></code></pre>
+<span class="out">{"ok":true,"app":"enygma","port":4073,"version":"23.2026.09.02.0134","mark":"Mk II.23"}</span></code></pre>
   <p>
     <code>/healthz</code> is the only route that needs no session. The
     <code>mark</code> it returns is the one thing to check after any deployment:
@@ -1595,7 +1609,7 @@ ENYGMA_GEMINI_API_KEY=AIza...</code></pre>
 
   <h2>Verifying, from outside</h2>
   <pre class="term"><code><span class="prompt">$</span> curl -s https://enygma.arkhm.io/healthz
-<span class="out">{"ok":true,...,"mark":"Mk II.7"}</span>
+<span class="out">{"ok":true,...,"mark":"Mk II.23"}</span>
 <span class="prompt">$</span> curl -s -o /dev/null -w "%{http_code}\n" https://arkhm.io/
 <span class="out">200</span></code></pre>
   <p>
@@ -2202,6 +2216,17 @@ restored enygma-20260827-045126.db.gz
     <li><strong>Stitched speaker identity across windows</strong> has been proven
       on synthetic audio end to end, but not yet measured on a real recording with
       real voices at a real join.</li>
+    <li><strong>The Friday note has never fired on real data.</strong> The
+      scheduling, the gathering and the voice rules are tested; a real week of
+      his real meetings has not yet produced one.</li>
+    <li><strong>Document content has only been generated by the stub.</strong>
+      Every renderer is verified by opening its output back with the library that
+      reads that format, and the voice rules are tested against a deliberately
+      badly-behaved model. What a real model writes into that structure, on his
+      real material, has not been read by anybody yet.</li>
+    <li><strong>The voice rules have never met a real model under pressure.</strong>
+      How often the first attempt trips a rule, and therefore how often a document
+      costs two calls instead of one, is unknown until it runs for a week.</li>
     <li><strong>Off-machine backup</strong> does not exist. Disk failure is total
       loss.</li>
     <li><strong>The consent conversation</strong> about recording an employer's
@@ -2214,6 +2239,237 @@ restored enygma-20260827-045126.db.gz
     This chapter should shrink with each edition. A manual that claims everything
     works is a manual nobody has tested.
   </div>
+</section>
+
+
+<!-- ═══════════════════ PART 6 ═══════════════════ -->
+<section class="dark part-divider">
+  <div class="label">Part Six</div>
+  <div>
+    <h1>What it writes</h1>
+    <p class="summary">
+      Three things now leave this app with his name on them: a weekly note, a
+      document in any of six formats, and every answer in Chat. This part is
+      what they are, and the rule all three are held to.
+    </p>
+  </div>
+  <div class="toc-mini">
+    <div><span class="ch">19</span><span>The Friday note</span></div>
+    <div><span class="ch">20</span><span>Documents</span></div>
+    <div><span class="ch">21</span><span>How ENYGMA writes</span></div>
+  </div>
+</section>
+
+<section class="page body-page">
+  <h1 class="chapter">Chapter 19 &nbsp;|&nbsp; The Friday note</h1>
+  <div class="chapter-meta"><span class="label">Part 6 · What it writes</span><span>19</span></div>
+
+  <p class="lede">
+    Once a week ENYGMA writes the thing you would otherwise put off: three to
+    five bullets on what you got done, three to five on what you are doing next,
+    plain enough to paste into an email to your manager without editing it.
+  </p>
+
+  <h2>Where it appears</h2>
+  <p>
+    On Home, in a card called <strong>Your week</strong>, spanning the full
+    width. It is the one thing on that screen that leaves the building, so it is
+    laid out to be read the way its recipient will read it rather than as a
+    dashboard tile.
+  </p>
+
+  <h2>When it is written</h2>
+  <p>
+    Friday at 15:00 local, set by <code>ENYGMA_WEEKNOTE_HOUR</code>. The check
+    rides on the existing worker thread and only runs when no transcription is
+    waiting, so it can never delay the audio you are standing there watching.
+  </p>
+  <p>
+    It is deliberately not a clock alarm. The host can be asleep at three on a
+    Friday, and an alarm firing into a sleeping machine writes nothing and says
+    nothing. Instead the worker asks a question with no clock in it: is there a
+    finished week without a note? A missed Friday becomes a note waiting for you
+    on Sunday rather than a week that never got written.
+  </p>
+
+  <h2>What it is built from</h2>
+  <ul>
+    <li><strong>Done:</strong> everything between Monday 00:00 and the end of
+      Friday — actions you moved to done, meeting summaries, notes you added,
+      documents you put in the Library.</li>
+    <li><strong>Next:</strong> your open and pending actions. Only work you
+      actually owe, so the note cannot promise your manager something you never
+      agreed to.</li>
+    <li><strong>Never:</strong> anything you rejected. Turning something down is
+      a decision, not an achievement, and the model is shown those explicitly as
+      declined so it cannot list them as work.</li>
+  </ul>
+  <p>
+    A line under the note says what it drew on, in words, so you can check it
+    before you send it.
+  </p>
+
+  <h2>The three buttons</h2>
+  <ul>
+    <li><strong>Copy</strong> puts it on the clipboard as plain text, ready for
+      an email body. The text comes from the server rather than from the page,
+      so what you paste is what was stored.</li>
+    <li><strong>Edit</strong> lets you fix a line in place.</li>
+    <li><strong>Write it again</strong> regenerates it, and warns first if you
+      have edited it.</li>
+  </ul>
+
+  <div class="callout note">
+    <span class="label">Note</span>
+    Your edit is stored beside the generated note, never on top of it. The
+    automatic Friday write cannot replace a line you fixed by hand. Pressing
+    <em>Write it again</em> does replace it, which is why that one asks.
+  </div>
+
+  <h2>A quiet week</h2>
+  <p>
+    A week with nothing in it produces no note at all, rather than an empty card
+    that reads like a broken feature or a full one about work that did not
+    happen. The first invented line would cost you every note after it.
+  </p>
+
+  <h2>What it is quietly building</h2>
+  <p>
+    Every week is kept. After a term you have a dated, factual record of what you
+    actually did, which is the document you want in front of you at a review and
+    the one nobody ever has.
+  </p>
+</section>
+
+<section class="page body-page">
+  <h1 class="chapter">Chapter 20 &nbsp;|&nbsp; Documents</h1>
+  <div class="chapter-meta"><span class="label">Part 6 · What it writes</span><span>20</span></div>
+
+  <p class="lede">
+    Ask for a file and you get a file. Markdown, HTML, Word, PowerPoint, Excel
+    or PDF, built from the conversation you are already having.
+  </p>
+
+  <h2>Two ways to ask</h2>
+  <ul>
+    <li><strong>In words.</strong> "Make me a .md file", "put that in a
+      spreadsheet", "turn this into a slide deck". ENYGMA works out the format
+      from how you asked. A general request for "a file" or "a document" is
+      answered in Markdown.</li>
+    <li><strong>Save as.</strong> Every ENYGMA answer carries a small control
+      for when you already have something worth keeping.</li>
+  </ul>
+  <p>
+    An ordinary question never produces a download. "What is a retained
+    message?" is answered, not filed.
+  </p>
+
+  <h2>Where the file goes</h2>
+  <p>
+    Into the thread, with a download, under <strong>Files in this thread</strong>
+    above the writing bar. Its prose also goes into the Library, so a question
+    next month can quote a document made today.
+  </p>
+
+  <h2>One document, six formats</h2>
+  <p>
+    Everything renders from a single structure — headings, paragraphs, bullets,
+    numbered lists, tables, code and quotes — rather than from six separate
+    generators, because six generators means six chances to produce something
+    that renders in one format and not the others.
+  </p>
+  <ul>
+    <li>A table becomes a real table in Word, Markdown, HTML and PDF, and a
+      sheet of its own in Excel.</li>
+    <li>A level 1 or 2 heading starts a new slide, so a document becomes a deck
+      without the model having to think in slides.</li>
+    <li>The HTML is self-contained and needs nothing from the internet, so it
+      opens from a Downloads folder with no signal.</li>
+    <li>The PDF is built directly rather than printed from a browser, and its
+      text is selectable and searchable. It is a document, not a picture of one.</li>
+  </ul>
+
+  <h2>House style</h2>
+  <p>
+    Plain and unbranded by default, which is what you want for anything going to
+    a manager or into an employer's repository. The ENYGMA look is available on
+    request. The letterhead in <code>docs/letterhead/</code> is the house style
+    at its fullest, as PDF and Word, light and dark.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">Careful</span>
+    Every document is a model call, and a slide deck is a large one. At seven
+    documents a week the cost is pennies and disappears next to transcription.
+    It is worth knowing the number rather than assuming it.
+  </div>
+
+  <h2>What it refuses</h2>
+  <p>
+    A document the model returned nothing usable for is refused rather than
+    shipped. A file that downloads and opens on nothing looks like the feature
+    worked, which is worse than an error.
+  </p>
+</section>
+
+<section class="page body-page">
+  <h1 class="chapter">Chapter 21 &nbsp;|&nbsp; How ENYGMA writes</h1>
+  <div class="chapter-meta"><span class="label">Part 6 · What it writes</span><span>21</span></div>
+
+  <p class="lede">
+    You put your name on what comes out of this app, so nothing leaving it
+    should announce that a machine wrote it. The rules live in
+    <code>src/voice.py</code>, and the Friday note, every document and every Chat
+    answer are held to the same one.
+  </p>
+
+  <h2>Three habits, three answers</h2>
+  <p>
+    Rules in a prompt get ignored under pressure. These are checked after
+    generation, in code.
+  </p>
+  <ul>
+    <li><strong>Vocabulary.</strong> Words almost nobody says out loud:
+      leverage, delve, streamline, robust, seamless, deep dive, key learnings.
+      Caught by list.</li>
+    <li><strong>Typography.</strong> The em dash, the semicolon in casual prose,
+      curly quotes. Nobody reaches for an em dash on a phone keyboard. Caught by
+      rewriting.</li>
+    <li><strong>Shape.</strong> "Here is your report." "In conclusion." Every
+      bullet opening with a bolded label and a colon. An essay frame around a
+      note. This is the one a word list misses entirely: a document can contain
+      no banned word at all and still be unmistakable.</li>
+  </ul>
+
+  <h2>Asked twice, then put right</h2>
+  <p>
+    The first attempt is checked. If anything is wrong the model is asked again
+    and <em>told exactly what</em>, because a bare retry repeats the mistake with
+    more confidence. The second attempt is kept only if it is actually better;
+    second is not the same as better.
+  </p>
+  <p>
+    After that the typography is corrected mechanically but the words are left
+    alone. Deleting a sentence changes what the document says, and a report that
+    quietly loses a clause is worse than one that reads a little stiffly.
+  </p>
+
+  <div class="callout note">
+    <span class="label">The rule that matters most</span>
+    Technical vocabulary is never touched. I<sup>2</sup>C, MOSFET, EZO, pull-up
+    resistor, bus address and diarization are the substance of the writing, not
+    decoration on it. A filter that flattens those has made the document worse
+    while congratulating itself. Cut management vocabulary, never engineering.
+  </div>
+
+  <h2>Code is exempt</h2>
+  <p>
+    A fenced code block passes through byte for byte and is not read when
+    deciding whether to ask again. So
+    <code>i2cdetect -y 1; make robust-build</code> neither loses its semicolon
+    nor sends the whole answer back for a rewrite. Table rows are data too and
+    keep their punctuation.
+  </p>
 </section>
 
 <!-- ═══════════════════ APPENDICES ═══════════════════ -->
@@ -2255,6 +2511,10 @@ restored enygma-20260827-045126.db.gz
     <tr><td><code>ENYGMA_GEMINI_MODEL</code></td><td><code>gemini-3.5-flash</code></td><td>Switching models is this line and a restart.</td></tr>
     <tr><td><code>ENYGMA_MAX_OUTPUT_TOKENS</code></td><td><code>65536</code></td><td>Output ceiling. Too low truncates long transcripts.</td></tr>
     <tr><td><code>ENYGMA_MAX_UPLOAD_MB</code></td><td><code>500</code></td><td>Per-file limit for audio, checked before a byte is written.</td></tr>
+    <tr><td><code>ENYGMA_WEEKNOTE_HOUR</code></td><td><code>15</code></td>
+        <td>Hour on Friday, local, when the week's note is written. Mid-afternoon
+        rather than end of day, so it is read and edited before he leaves rather
+        than found on Monday describing a week he has stopped thinking about.</td></tr>
     <tr><td><code>ENYGMA_CHUNK_MINUTES</code></td><td><code>25</code></td><td>Window length for long audio. Must stay under the thirty minute diarization limit.</td></tr>
     <tr><td><code>ENYGMA_CHUNK_OVERLAP_SECONDS</code></td><td><code>90</code></td><td>How much speech two windows share. This is what carries speaker identity across a join.</td></tr>
     <tr><td><code>ENYGMA_MAX_UPLOAD_MB</code></td><td><code>500</code></td><td>Per-file limit, checked before a byte is written.</td></tr>
@@ -2273,7 +2533,7 @@ restored enygma-20260827-045126.db.gz
   <h1 class="chapter">Appendix B &nbsp;|&nbsp; HTTP surface</h1>
   <div class="chapter-meta"><span class="label">Reference</span><span>B</span></div>
   <p>
-    38 routes. <strong>View</strong> needs a session of any age;
+    43 routes. <strong>View</strong> needs a session of any age;
     <strong>Write</strong> needs one inside the freshness window;
     <strong>Open</strong> needs none.
   </p>
@@ -2304,7 +2564,12 @@ restored enygma-20260827-045126.db.gz
     <tr><td>POST</td><td><code>/auth/register/*</code>, <code>/auth/login/*</code></td><td>Open*</td><td>WebAuthn. Registration is open only while nothing is enrolled.</td></tr>
     <tr><td>POST</td><td><code>/auth/pin/verify</code>, <code>/auth/pairing/redeem</code></td><td>Open</td><td>Rate limited by the shared counter.</td></tr>
     <tr><td>POST</td><td><code>/auth/logout</code></td><td>Open</td><td>Clears the cookie.</td></tr>
-  </table>
+      <tr><td>POST</td><td><code>/chat/{id}/document</code></td><td>Write</td><td>Save as: build a document from one answer, or from the thread.</td></tr>
+    <tr><td>GET</td><td><code>/files/{id}</code></td><td>View</td><td>Download a document ENYGMA made. Always an attachment, never inline.</td></tr>
+    <tr><td>POST</td><td><code>/week/{monday}/again</code></td><td>Write</td><td>Regenerate the Friday note. Replaces an edit, deliberately.</td></tr>
+    <tr><td>POST</td><td><code>/week/{monday}/edit</code></td><td>Write</td><td>Store his version beside the generated one, never on top of it.</td></tr>
+    <tr><td>GET</td><td><code>/week/{monday}/text</code></td><td>View</td><td>The note as plain text, which is what Copy reads.</td></tr>
+</table>
 
   <div class="callout note">
     <span class="label">Note</span>
@@ -2333,6 +2598,10 @@ restored enygma-20260827-045126.db.gz
 │   ├── meetings.py            the read layer for recordings
 │   ├── home.py  actions.py  directory.py  chat.py  glossary.py
 │   ├── library.py             documents, passages, retrieval
+│   ├── voice.py               one rule for every word that leaves the app
+│   ├── weeknote.py            the Friday note: gather, write, keep
+│   ├── documents.py           one structure, six renderers, no system deps
+│   ├── made.py                the files it built, on disk under data/
 │   ├── export.py              one meeting as Markdown
 │   │
 │   ├── migrations/            forever-additive, applied in filename order
@@ -2437,7 +2706,21 @@ restored enygma-20260827-045126.db.gz
         <td>Stopwords are removed, and a passage must share two distinctive words with the question or one that is rare across the library. Otherwise nothing is returned.</td></tr>
     <tr><td>The setup-code field answered every possible mistake — a typo, an expired code, a used code, a PIN — with the same sentence.</td>
         <td>A four-digit entry is named as a PIN; a wrong length says what the length should be.</td></tr>
-  </table>
+      <tr><td>Generated documents were stored in <code>app/made</code>, beside <code>data/</code> rather than inside it. The service unit runs <code>ProtectSystem=strict</code> and grants exactly two writable paths, so the directory was read-only at the kernel level whatever its permissions said. Every test passed; it failed on the host with <code>[Errno 30]</code> the first time he asked for a file.</td>
+        <td>Documents live under <code>data/made</code>. A test reads <code>ReadWritePaths</code> out of the unit file and scans the source for any store hung off <code>BASE_DIR</code> that is not one of them, because no runtime test in a temp directory could ever catch this.</td></tr>
+    <tr><td>The writing bar in Chat was an ordinary block at the end of a growing page. On a thread with four answers it sat 163 pixels below the fold and reaching it meant scrolling the whole conversation. Reported as "the writing bar doesn't fit the phone".</td>
+        <td>The composer is stuck to the bottom of the screen and the transcript scrolls behind it. Both folding-phone widths, 344 and 830, are measured on every change.</td></tr>
+    <tr><td>Hiding the tab bar while typing meant pressing Send blurred the box, which put the bar back, which moved the composer sixty pixels between his finger going down and coming up. The button slid out from under his thumb as he pressed it and nothing happened at all.</td>
+        <td>Send no longer takes focus off the box, and the bar returns only once focus has genuinely left the composer.</td></tr>
+    <tr><td>Enter sent the message. On a phone there is no Shift to hold, so the only key that starts a new line was the key that posted a half-finished sentence — four times, with nothing guarding a resend.</td>
+        <td>Enter sends only where a Shift key exists. The composer is disabled while a request is in flight and the field is cleared before it leaves.</td></tr>
+    <tr><td>Chat had no memory. Every turn was answered cold, so a follow-up had nothing to follow and the same question twice produced two unrelated essays.</td>
+        <td>The last twelve turns go into the prompt, and the same words inside twenty seconds return what was already said.</td></tr>
+    <tr><td>The installer ended by saying the pipeline was still the stub while its own environment report, four lines above, showed <code>gemini</code> and a key. The false half was the one written as an instruction.</td>
+        <td>The closing advice is read from the installed <code>.env</code>.</td></tr>
+    <tr><td>In the letterhead, tracking set for a mono label leaked into every plain string after it: <code>Tc</code> is PDF graphics state, not text-object state. The letter body came out letter-spaced and ran off the right margin, and the wrapper could not know because it measures without tracking.</td>
+        <td>Tracking is reset to zero inside the same text object. A test measures a rendered line.</td></tr>
+</table>
 
   <div class="divider"></div>
   <p class="center label">End of Volume I</p>
