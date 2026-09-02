@@ -548,7 +548,17 @@ $("#retry")?.addEventListener("click", async (e) => {
 /* -------------------------------------------------------------- chat */
 {
   const convo = $("#convo");
-  const toBottom = () => { if (convo) convo.scrollTop = convo.scrollHeight; };
+  /* On a phone the transcript is not its own scroller -- the page is -- so
+     scrolling the element does nothing and the newest answer stays off screen.
+     Scroll whichever one actually moves. */
+  const toBottom = () => {
+    if (!convo) return;
+    if (convo.scrollHeight > convo.clientHeight + 1) {
+      convo.scrollTop = convo.scrollHeight;
+    } else {
+      window.scrollTo(0, document.documentElement.scrollHeight);
+    }
+  };
   toBottom();
   const body = $("#body");
   const form = $("#say");
@@ -560,6 +570,13 @@ $("#retry")?.addEventListener("click", async (e) => {
     body.style.height = Math.min(body.scrollHeight, 180) + "px";
   };
   body?.addEventListener("input", grow);
+
+  /* Typing hides the tab bar. Six tabs are 60px, and with a keyboard open on a
+     folding phone's cover screen there is not much more than a hundred to
+     spend. */
+  const typing = (on) => document.documentElement.classList.toggle("typing", on);
+  body?.addEventListener("focus", () => { typing(true); setTimeout(toBottom, 250); });
+  body?.addEventListener("blur", () => typing(false));
 
   /* Enter sends only where there is a Shift key to hold for a newline.
      On a phone the return key is the ONLY way to start a new line, and there is

@@ -145,3 +145,73 @@ def test_the_installer_does_not_call_a_live_pipeline_a_stub():
 
     stub = decide("ENYGMA_PIPELINE=stub\n")
     assert "the stub" in stub and "ENYGMA_PIPELINE=gemini" in stub
+
+
+# --------------------------------------------------------------- the Fold
+
+def _css() -> str:
+    return (pathlib.Path(__file__).resolve().parent.parent
+            / "src/static/css/app.css").read_text()
+
+
+def test_the_writing_bar_sticks_to_the_screen_not_to_the_transcript():
+    """Reported as "the writing bar doesn't fit the phone". It fitted; it was
+    below the fold. The composer was an ordinary block at the end of a growing
+    page, so four answers pushed it out of sight and reaching it meant scrolling
+    the whole conversation."""
+    css = _css()
+    block = css[css.index(".composer {"):css.index(".composer form {")]
+    assert "position: sticky" in block
+    assert "bottom: 0" in block
+
+
+def test_the_composer_clears_the_tab_bar_on_a_phone():
+    """Sticking to 0 on mobile parks it underneath the fixed tab bar."""
+    css = _css()
+    phone = css[css.index("@media (max-width: 899px) {\n  .chatwrap"):]
+    phone = phone[:phone.index("@media (max-width: 380px)")]
+    assert "bottom: calc(var(--tabbar) + env(safe-area-inset-bottom))" in phone
+
+
+def test_the_send_button_cannot_be_squeezed_off_a_narrow_screen():
+    """A flex item will not shrink below its intrinsic width unless told to, and
+    a textarea's intrinsic width comes from its cols attribute. That is what
+    pushes the button off the edge of a 344px cover screen."""
+    css = _css()
+    assert ".composer textarea { min-width: 0; }" in css
+    assert ".composer form > .btn { flex: none; }" in css
+
+
+def test_the_cover_screen_width_is_written_down():
+    """He should not have to report this twice."""
+    css = _css()
+    assert "344" in css and "Fold" in css
+
+
+def test_the_keyboard_shrinks_the_layout_not_just_the_view():
+    """Without this, 100dvh still counts the space the keyboard covers and a bar
+    stuck to the bottom of the screen is stuck behind the keyboard."""
+    html = (pathlib.Path(__file__).resolve().parent.parent
+            / "src/templates/base.html").read_text()
+    assert "interactive-widget=resizes-content" in html
+
+
+def test_the_tabs_get_out_of_the_way_while_he_types():
+    """Six tabs are 60px. With a keyboard up on a cover screen there is not much
+    more than a hundred to spend."""
+    css, js = _css(), (pathlib.Path(__file__).resolve().parent.parent
+                       / "src/static/js/app.js").read_text()
+    assert "html.typing .tabbar { display: none; }" in css
+    chat = js[js.index("-------- chat */"):js.index("------- settings */")]
+    assert 'classList.toggle("typing"' in chat
+    assert '"focus"' in chat and '"blur"' in chat
+
+
+def test_the_newest_answer_is_scrolled_to_on_a_phone_too():
+    """On a phone the transcript is not its own scroller, the page is, so
+    scrolling the element does nothing and the answer stays off screen."""
+    js = (pathlib.Path(__file__).resolve().parent.parent
+          / "src/static/js/app.js").read_text()
+    chat = js[js.index("-------- chat */"):js.index("------- settings */")]
+    assert "window.scrollTo" in chat
+    assert "convo.scrollHeight > convo.clientHeight" in chat

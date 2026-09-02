@@ -2,7 +2,10 @@
 <html lang="en" data-nav="{{ nav|default('') }}">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!-- resizes-content so the layout viewport shrinks when the soft keyboard opens.
+     Without it 100dvh still counts the space the keyboard is covering, and a
+     bar stuck to the bottom of the screen is stuck behind the keyboard. -->
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
 <meta name="color-scheme" content="light dark">
 <meta name="theme-color" content="#f4f4f6" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#0d0d0f" media="(prefers-color-scheme: dark)">

@@ -127,6 +127,18 @@ a:hover { text-decoration: underline; }
 .tab-item.on { color: var(--text); }
 .tab-item.on .ico { stroke-width: 2; }
 
+/* ----------------------------------------------------------------------
+   Target devices.
+
+   Yahya reads this on a Galaxy Z Fold. Two screens, and the cover one is the
+   hard case: about 344 CSS pixels wide and very tall, narrower than any phone
+   this was originally checked against. The unfolded inner screen lands near
+   830, which is just under the 899 breakpoint, so it gets the phone layout on
+   a screen the size of a small tablet. Both are tested at those widths.
+
+   The rule that follows from it: nothing may be wider than 344, and anything
+   fixed to the bottom has to account for both the tab bar and the keyboard.
+   ---------------------------------------------------------------------- */
 @media (max-width: 899px) {
   body { grid-template-columns: minmax(0, 1fr); }
   body:not(.bare) { padding-bottom: calc(var(--tabbar) + env(safe-area-inset-bottom)); }
@@ -516,10 +528,21 @@ pre.doc {
                          border-radius: var(--radius-md); padding: var(--space-12) var(--space-16); }
 .turn.enygma .bubble { color: var(--text-dim); }
 
-.composer { border-top: 1px solid var(--border-divider); padding: var(--space-16) var(--space-32);
+/* Stuck to the bottom of the screen, not to the end of the transcript.
+   Before this it was an ordinary block at the end of a growing page, so four
+   answers pushed it past the fold and he had to scroll the whole conversation
+   to reach the box. On a phone that reads as the writing bar not fitting the
+   screen, which is exactly how it was reported. */
+.composer { position: sticky; bottom: 0; z-index: 25;
+            border-top: 1px solid var(--border-divider); padding: var(--space-16) var(--space-32);
             background: var(--surface); }
 .composer form { max-width: var(--reading); margin: 0 auto; display: flex; gap: var(--space-8);
                  align-items: flex-end; }
+/* A flex item will not shrink below its intrinsic width unless told to, and a
+   textarea's intrinsic width comes from its cols attribute. On a narrow phone
+   that is what pushes the send button off the edge. */
+.composer textarea { min-width: 0; }
+.composer form > .btn { flex: none; }
 .composer textarea {
   flex: 1; min-height: 44px; max-height: 180px; resize: none; padding: var(--space-12);
   border-radius: var(--radius-sm); border: 1px solid var(--border-rest);
@@ -538,6 +561,22 @@ pre.doc {
   .chatwrap.at-convo .threads { display: none; }
   .chatwrap:not(.at-convo) .convo { display: none; }
   .convo-scroll, .composer { padding-left: var(--space-20); padding-right: var(--space-20); }
+  /* The tab bar is fixed over the bottom of the page, so sticking to 0 would
+     park the composer underneath it. */
+  .composer { bottom: calc(var(--tabbar) + env(safe-area-inset-bottom)); }
+  /* While he is typing, the six tabs are 60px he does not need and cannot
+     spare: with the keyboard up on a cover screen there is barely a hundred
+     left. They come back the moment the box loses focus. */
+  html.typing .tabbar { display: none; }
+  html.typing body:not(.bare) { padding-bottom: 0; }
+  html.typing .composer { bottom: 0; }
+}
+@media (max-width: 380px) {
+  /* Cover-screen width. Every horizontal pixel spent on padding is one the
+     sentence he is writing does not get. */
+  .convo-scroll, .composer { padding-left: var(--space-12); padding-right: var(--space-12); }
+  .composer form { gap: var(--space-6); }
+  .composer form > .btn { padding: 0 var(--space-12); }
 }
 
 /* ======================================================================
