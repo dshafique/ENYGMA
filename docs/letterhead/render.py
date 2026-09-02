@@ -51,8 +51,8 @@ META = [("FROM", "[Your name]"), ("REF", "[Reference]"), ("DATE", "[2 September 
 RECIPIENT = ["[Recipient name]", "[Their title]", "[Organisation]", "[Address line]"]
 SALUTATION = "Dear [name],"
 BODY = [
-    "This is the ENYGMA letterhead. The frame is set; everything below the rule "
-    "is yours. Replace this paragraph and the two under it, and leave the "
+    "This is the ENYGMA letterhead. The frame is set. Everything below the "
+    "rule is yours. Replace this paragraph and the two under it, and leave the "
     "spacing alone: the measure is set to about seventy characters because that "
     "is where a line stops being comfortable to read.",
 
@@ -95,17 +95,38 @@ def pdf(skin: dict, out: pathlib.Path) -> None:
     c.setFillColor(HexColor(skin["page"]))
     c.rect(0, 0, W, H, stroke=0, fill=1)
 
+    def tracked(text, x, y, font, size, colour, spacing=0.0, right=False):
+        """Letter-spaced text.
+
+        Two traps here, both of which bit. Tracking lives on the text object in
+        reportlab rather than on the canvas, and a right-aligned run has to be
+        measured with the spacing included or it drifts off the margin.
+
+        The one that actually broke the page: Tc is PDF *graphics* state, not
+        text-object state, so it survives the end of the object and every plain
+        drawString after it inherits the tracking. The letter body came out
+        letter-spaced and ran off the right edge. Set it back to zero inside the
+        same object, after the text is written.
+        """
+        width = c.stringWidth(text, font, size) + spacing * max(len(text) - 1, 0)
+        obj = c.beginText()
+        obj.setFont(font, size)
+        obj.setFillColor(colour)
+        obj.setCharSpace(spacing)
+        obj.setTextOrigin(x - width if right else x, y)
+        obj.textOut(text)
+        obj.setCharSpace(0)
+        c.drawText(obj)
+        return width
+
     def rule(y, x0=M, x1=W - M, colour=None):
         c.setStrokeColor(colour or divider)
         c.setLineWidth(0.6)
         c.line(x0, y, x1, y)
 
-    def label(text, x, y, size=6.6, colour=None, tracking=1.5):
-        c.setFont("Courier-Bold", size)
-        c.setFillColor(colour or muted)
-        c.setCharSpace(tracking)
-        c.drawString(x, y, text.upper())
-        c.setCharSpace(0)
+    def label(text, x, y, size=6.6, colour=None, spacing=1.5, right=False):
+        return tracked(text.upper(), x, y, "Courier-Bold", size,
+                       colour or muted, spacing, right)
 
     def mark(x, y, cell=3.1 * mm, gap=0.85 * mm):
         """The cipher grid, drawn. Four voids, in the four places the app puts
@@ -123,33 +144,24 @@ def pdf(skin: dict, out: pathlib.Path) -> None:
     # --- masthead ---------------------------------------------------------
     top = H - M
     width = mark(M, top)
+    left = M + width + 9 * mm
 
-    c.setFont("Helvetica-Bold", 19)
-    c.setFillColor(ink)
-    c.setCharSpace(2.2)
-    c.drawString(M + width + 9 * mm, top - 12.5 * mm, SENDER[0])
-    c.setCharSpace(0)
-    label(SENDER[1], M + width + 9 * mm, top - 17.5 * mm, size=6.4, colour=muted)
+    tracked(SENDER[0], left, top - 12.5 * mm, "Helvetica-Bold", 19, ink, 2.2)
+    label(SENDER[1], left, top - 17.5 * mm, size=6.4)
 
-    # The meta block hangs off the right margin, right aligned, so the two
-    # columns share a baseline and the eye has one edge to run down.
+    # The meta block hangs off the right margin so the two columns share a
+    # baseline and the eye has one edge to run down.
     y = top - 1 * mm
     for name, value in META:
-        c.setFont("Courier-Bold", 6.4)
-        c.setFillColor(muted)
-        c.setCharSpace(1.5)
-        c.drawRightString(W - M - 34 * mm, y, name)
-        c.setCharSpace(0)
-        c.setFont("Helvetica", 9)
-        c.setFillColor(dim)
-        c.drawRightString(W - M, y, value)
+        label(name, W - M - 34 * mm, y, size=6.4, right=True)
+        tracked(value, W - M, y, "Helvetica", 9, dim, right=True)
         y -= 5.6 * mm
 
     rule(top - 26 * mm)
 
     # --- recipient --------------------------------------------------------
     y = top - 38 * mm
-    label("TO", M, y, colour=muted)
+    label("TO", M, y)
     y -= 6 * mm
     c.setFont("Helvetica", 10)
     c.setFillColor(dim)
@@ -165,10 +177,10 @@ def pdf(skin: dict, out: pathlib.Path) -> None:
     y -= 9 * mm
 
     measure = W - 2 * M
-    c.setFillColor(dim)
     for para in BODY:
+        c.setFont("Helvetica", 10.5)
+        c.setFillColor(dim)
         for line in _wrap(c, para, "Helvetica", 10.5, measure):
-            c.setFont("Helvetica", 10.5)
             c.drawString(M, y, line)
             y -= 5.6 * mm
         y -= 4 * mm
@@ -178,9 +190,10 @@ def pdf(skin: dict, out: pathlib.Path) -> None:
     c.setFont("Helvetica", 10.5)
     c.setFillColor(ink)
     c.drawString(M, y, CLOSING)
-    y -= 18 * mm                      # room for a signature
-    rule(y + 4 * mm, x0=M, x1=M + 52 * mm, colour=HexColor(skin["rest"]))
+    y -= 20 * mm                      # room for a signature
+    rule(y + 5 * mm, x0=M, x1=M + 52 * mm, colour=HexColor(skin["rest"]))
     c.setFont("Helvetica-Bold", 10)
+    c.setFillColor(ink)
     c.drawString(M, y, SIGNOFF[0])
     c.setFont("Helvetica", 9)
     c.setFillColor(muted)
@@ -189,11 +202,7 @@ def pdf(skin: dict, out: pathlib.Path) -> None:
     # --- footer -----------------------------------------------------------
     rule(M + 10 * mm)
     label(FOOTER_LEFT, M, M + 4 * mm, size=6.4)
-    c.setFont("Courier", 6.4)
-    c.setFillColor(muted)
-    c.setCharSpace(1.2)
-    c.drawRightString(W - M, M + 4 * mm, FOOTER_RIGHT)
-    c.setCharSpace(0)
+    tracked(FOOTER_RIGHT, W - M, M + 4 * mm, "Courier", 6.4, muted, 1.2, right=True)
 
     c.showPage()
     c.save()
@@ -316,16 +325,23 @@ def docx(skin: dict, out: pathlib.Path) -> None:
 
     # --- masthead: mark and wordmark on the left, meta on the right --------
     png = _mark_png(skin, out.with_name(f".mark-{skin['name']}.png"))
-    head = d.add_table(rows=1, cols=2)
+    # Three columns, not two: the mark sits beside the wordmark exactly as it
+    # does in the PDF. Putting both in one cell stacks them, which is a
+    # different lockup, and the two files have to be the same letterhead.
+    head = d.add_table(rows=1, cols=3)
     head.alignment = WD_TABLE_ALIGNMENT.CENTER
-    head.autofit = True
-    left, right = head.rows[0].cells
+    head.autofit = False
+    badge, left, right = head.rows[0].cells
+    badge.width = Cm(2.2)
+    left.width = Cm(8.2)
+    right.width = Cm(6.0)
 
-    holder = left.paragraphs[0]
-    holder.paragraph_format.space_after = Pt(6)
+    holder = badge.paragraphs[0]
+    holder.paragraph_format.space_after = Pt(0)
     holder.add_run().add_picture(str(png), width=Cm(1.9))
 
-    name = left.add_paragraph()
+    name = left.paragraphs[0]
+    name.paragraph_format.space_before = Pt(9)
     name.paragraph_format.space_after = Pt(0)
     run = name.add_run(SENDER[0])
     run.bold = True
@@ -364,12 +380,28 @@ def docx(skin: dict, out: pathlib.Path) -> None:
         para(line, size=10, space_after=2)
 
     # --- body -------------------------------------------------------------
-    para(SALUTATION, size=10.5, colour=skin["ink"], space_after=12)
+    salutation = para(SALUTATION, size=10.5, colour=skin["ink"], space_after=12)
+    salutation.paragraph_format.space_before = Pt(18)
     for text in BODY:
         para(text, size=10.5, space_after=12)
 
     # --- sign off ---------------------------------------------------------
-    para(CLOSING, size=10.5, colour=skin["ink"], space_after=44)
+    para(CLOSING, size=10.5, colour=skin["ink"], space_after=40)
+    # The line he signs on. Short, and only as wide as a signature needs.
+    signature = d.add_paragraph()
+    signature.paragraph_format.space_after = Pt(4)
+    sig_borders = OxmlElement("w:pBdr")
+    sig_bottom = OxmlElement("w:bottom")
+    sig_bottom.set(qn("w:val"), "single")
+    sig_bottom.set(qn("w:sz"), "4")
+    sig_bottom.set(qn("w:space"), "1")
+    sig_bottom.set(qn("w:color"), skin["rest"].lstrip("#").upper())
+    sig_borders.append(sig_bottom)
+    signature._p.get_or_add_pPr().append(sig_borders)
+    sig_ind = OxmlElement("w:ind")
+    sig_ind.set(qn("w:right"), "6400")        # twips: stop it short of the margin
+    signature._p.get_or_add_pPr().append(sig_ind)
+
     para(SIGNOFF[0], size=10, colour=skin["ink"], bold=True, space_after=2)
     para(SIGNOFF[1], size=9, colour=skin["muted"], space_after=0)
 
