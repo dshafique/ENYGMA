@@ -540,10 +540,32 @@ pre.doc {
    is the last thing above his thumb, and it is a plain <a download> so the
    phone's own download machinery handles it rather than anything of ours.
    ====================================================================== */
-.madefiles { border-top: 1px solid var(--border-divider); background: var(--surface);
-             padding: var(--space-12) var(--space-32) 0; }
-.madefiles > .label { display: block; margin-bottom: var(--space-8); }
-.madelist { max-width: var(--reading); margin: 0 auto; display: flex;
+/* One line, not a list.
+   The list used to sit above the writing bar permanently, and on a cover screen
+   three files took a third of the height for something he looks at once. It is
+   a button now: one line that says how many there are, and the list opens over
+   the top so nothing moves when he taps it. */
+/* In the header, not above the writing bar.
+   It was a full-width row at the bottom first, which cost 45px of a cover
+   screen and, being outside the sticky composer, sat below the fold behind the
+   tab bar -- the same fault the composer itself had. Up here it costs nothing
+   vertically, and "go and look at something" belongs in a header anyway. */
+.topbar { order: 0; }
+.filesbtn {
+  order: 2; flex: none; display: inline-flex; align-items: center; gap: var(--space-6);
+  height: 34px; padding: 0 var(--space-12); cursor: pointer;
+  border: 1px solid var(--border-rest); border-radius: var(--radius-pill);
+  background: var(--surface-low); color: var(--text-dim);
+  font-family: var(--font-mono); font-size: 12px;
+}
+.filesbtn:hover { background: var(--surface-container); color: var(--text); }
+.filesbtn .ico { flex: none; }
+.filesbtn .n { line-height: 1; }
+
+.sheet.files { align-items: stretch; text-align: left; max-height: 78vh; }
+.sheet.files h2 { text-align: left; }
+.sheet.files .madelist { overflow-y: auto; }
+.madelist { max-width: var(--reading); margin: 0 auto; width: 100%; display: flex;
             flex-direction: column; gap: var(--space-6); }
 .madefile { display: flex; align-items: center; gap: var(--space-12);
             padding: var(--space-12);
@@ -595,7 +617,7 @@ pre.doc {
 .composer textarea:disabled { opacity: 0.6; }
 /* Said once, quietly, on the surface where the mistake was actually made: on a
    phone there is no Shift+Enter, so it has to be clear that Return is safe. */
-.composer-hint { max-width: var(--reading); margin: var(--space-8) auto 0;
+.composer-hint { max-width: var(--reading); margin: var(--space-6) auto 0;
                  color: var(--text-muted); font-size: 12px; line-height: 16px; }
 @media (hover: hover) and (pointer: fine) { .composer-hint { display: none; } }
 .turn.pending .bubble { color: var(--text-muted); }
@@ -603,11 +625,11 @@ pre.doc {
   .chatwrap { grid-template-columns: minmax(0, 1fr); }
   .chatwrap.at-convo .threads { display: none; }
   .chatwrap:not(.at-convo) .convo { display: none; }
-  .convo-scroll, .composer, .madefiles {
+  .convo-scroll, .composer, .filesbtn {
     padding-left: var(--space-20); padding-right: var(--space-20); }
-  /* Below the transcript, above the writing bar, and it must not eat the screen
-     when a thread has collected a few files. */
-  .madelist { max-height: 34vh; overflow-y: auto; }
+  /* Below the writing bar there is the tab bar and then the keyboard. Sixteen
+     pixels of padding under the box is sixteen he does not get to write in. */
+  .composer { padding-bottom: var(--space-8); }
   /* The tab bar is fixed over the bottom of the page, so sticking to 0 would
      park the composer underneath it. */
   .composer { bottom: calc(var(--tabbar) + env(safe-area-inset-bottom)); }
@@ -621,7 +643,7 @@ pre.doc {
 @media (max-width: 380px) {
   /* Cover-screen width. Every horizontal pixel spent on padding is one the
      sentence he is writing does not get. */
-  .convo-scroll, .composer, .madefiles {
+  .convo-scroll, .composer, .filesbtn {
     padding-left: var(--space-12); padding-right: var(--space-12); }
   .composer form { gap: var(--space-6); }
   .composer form > .btn { padding: 0 var(--space-12); }

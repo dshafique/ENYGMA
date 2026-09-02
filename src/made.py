@@ -42,15 +42,22 @@ def _store(data: bytes, fmt: str) -> tuple[str, str]:
     if not path.exists():
         path.write_bytes(data)
         path.chmod(0o600)
-    return str(path.relative_to(BASE_DIR)), digest
+    # Relative to the data directory, not to the application root. They are the
+    # same place today, because data/ sits inside app/, but the moment anyone
+    # points ENYGMA_DATA at another disk -- which is exactly what you do when the
+    # Spark's disk fills -- relative_to(BASE_DIR) raises and every document fails
+    # to save with a path error that reads like a bug in the renderer.
+    return str(path.relative_to(DATA_DIR)), digest
 
 
 def create(brief: str, fmt: str, *, context: str = "", thread_id: int | None = None,
-           style: str = "plain", backend=None, to_library: bool = True) -> dict:
+           style: str = "plain", backend=None, to_library: bool = True,
+           fallback_title: str = "") -> dict:
     """Make one document, keep it, and hand back the row."""
     if fmt not in documents.FORMATS:
         raise ValueError(f"{fmt!r} is not a format ENYGMA can write.")
-    doc = documents.compose(brief, context, backend=backend)
+    doc = documents.compose(brief, context, backend=backend,
+                            fallback_title=fallback_title)
     data = documents.render(doc, fmt, style)
     name = documents.filename(doc, fmt)
     path, digest = _store(data, fmt)
@@ -107,8 +114,14 @@ def blob(made_id: int) -> tuple[pathlib.Path, dict] | None:
     row = get(made_id)
     if row is None:
         return None
-    path = pathlib.Path(BASE_DIR) / row["path"]
-    return (path, row) if path.exists() else None
+    # Rows written before the path became data-relative are stored as
+    # "data/made/...", relative to the application root. Both resolve, so an
+    # install that predates this keeps its documents.
+    for root in (DATA_DIR, BASE_DIR):
+        path = pathlib.Path(root) / row["path"]
+        if path.exists():
+            return path, row
+    return None
 
 
 def readable(size: int) -> str:

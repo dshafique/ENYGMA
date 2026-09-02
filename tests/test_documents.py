@@ -323,3 +323,77 @@ def test_nothing_is_stored_outside_a_path_systemd_makes_writable():
     made_src = (root / "src/made.py").read_text()
     assert 'MADE = DATA_DIR / "made"' in made_src, \
         "the made-documents store moved back out of data/"
+
+
+def test_a_document_survives_the_data_directory_moving_to_another_disk():
+    """Paths were stored relative to the application root, so the moment data/
+    was not inside app/ -- which is what you do when the disk fills -- every
+    document failed to save with a path error that reads like a renderer bug."""
+    import importlib
+    from src import made, documents
+    tmp = pathlib.Path(tempfile.mkdtemp())
+    elsewhere = tmp / "on-another-disk"
+    keep = (made.BASE_DIR, made.DATA_DIR, made.MADE)
+    try:
+        made.BASE_DIR = tmp / "app"
+        made.DATA_DIR = elsewhere
+        made.MADE = elsewhere / "made"
+        stored, _ = made._store(documents.render(doc(), "md"), "md")
+        assert not stored.startswith("/"), stored
+        assert (made.DATA_DIR / stored).exists(), stored
+    finally:
+        made.BASE_DIR, made.DATA_DIR, made.MADE = keep
+
+
+def test_documents_written_by_an_older_build_still_download():
+    """Those rows hold "data/made/...", relative to the application root."""
+    from src import made, documents
+    tmp = pathlib.Path(tempfile.mkdtemp())
+    keep = (made.BASE_DIR, made.DATA_DIR, made.MADE)
+    try:
+        made.BASE_DIR = tmp
+        made.DATA_DIR = tmp / "data"
+        made.MADE = made.DATA_DIR / "made"
+        made.MADE.mkdir(parents=True)
+        old = made.MADE / "deadbeef.md"
+        old.write_bytes(b"# from an older build\n")
+        with db.cursor() as conn:
+            conn.execute(
+                "INSERT INTO made_documents (format, style, title, filename, mime, "
+                "path, bytes) VALUES ('md','plain','Old','old.md','text/markdown',"
+                "'data/made/deadbeef.md', 22)")
+            made_id = conn.execute("SELECT last_insert_rowid() AS i").fetchone()["i"]
+        found = made.blob(made_id)
+        assert found is not None, "an older build's document became undownloadable"
+        assert found[0].read_bytes().startswith(b"# from an older build")
+    finally:
+        made.BASE_DIR, made.DATA_DIR, made.MADE = keep
+
+
+def test_a_request_with_no_subject_is_named_for_the_thread():
+    """"put that in a spreadsheet" names nothing. A folder of document.xlsx and
+    document.docx is a folder he cannot search."""
+    from src import chat, made
+    thread_id = chat.start("New conversation")
+    chat.say(thread_id, "How should I track the Lucelabs tent build?")
+    chat.say(thread_id, "put that in a spreadsheet")
+    files = made.for_thread(thread_id)
+    assert files, "no file was made"
+    assert not files[-1]["filename"].startswith("document."), files[-1]["filename"]
+    assert "tent" in files[-1]["filename"].lower(), files[-1]["filename"]
+
+
+def test_a_borrowed_thread_title_is_trimmed_like_any_other_request():
+    """A thread is named after its first message, and that message is often
+    itself a request for a file. Borrowing it raw hands back exactly the
+    sentence the trimming existed to remove."""
+    from src import documents
+    got = documents._stub("put that in a spreadsheet", "",
+                          "Make me a .md file for the tent logbook")
+    assert got["title"] == "tent logbook", got["title"]
+
+
+def test_an_unnamed_thread_is_not_a_title():
+    from src import documents
+    assert documents._stub("turn this into a deck", "", "New conversation")["title"] \
+        == "Document"

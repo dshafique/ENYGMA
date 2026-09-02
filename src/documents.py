@@ -621,11 +621,12 @@ def enforce(doc: dict) -> dict:
     return doc
 
 
-def compose(brief: str, context: str = "", backend=None) -> dict:
+def compose(brief: str, context: str = "", backend=None,
+            fallback_title: str = "") -> dict:
     """Ask for a document, and hand back a structure the renderers can trust."""
     from .config import config
     if config.PIPELINE != "gemini":
-        return _stub(brief, context)
+        return _stub(brief, context, fallback_title)
     from .pipeline.gemini import GeminiBackend
     backend = backend or GeminiBackend()
     ask = f"{BRIEF}\n\nWhat he asked for:\n{brief}\n"
@@ -721,7 +722,7 @@ def title_from_request(brief: str) -> str:
     return (kept or "Document")[:80]
 
 
-def _stub(brief: str, context: str) -> dict:
+def _stub(brief: str, context: str, fallback_title: str = "") -> dict:
     """No model. The material itself, formatted, so the whole path stays
     testable and the app still hands him a real file."""
     blocks = [{"type": "heading", "level": 1, "text": "What was asked for",
@@ -734,5 +735,16 @@ def _stub(brief: str, context: str) -> dict:
         blocks += [{"type": "paragraph", "text": para.strip(), "items": [],
                     "columns": [], "rows": []}
                    for para in context.split("\n\n") if para.strip()][:40]
-    return normalise({"title": title_from_request(brief),
-                      "subtitle": "", "blocks": blocks})
+    # "put that in a spreadsheet" names no subject, so the thread does. A folder
+    # of document.xlsx and document.docx is a folder he cannot search.
+    #
+    # The thread's own title is trimmed the same way, because a thread is named
+    # after its first message and that message is often itself a request for a
+    # file. Without this the fallback hands back exactly the sentence the
+    # trimming existed to remove.
+    title = title_from_request(brief)
+    if title == "Document" and fallback_title.strip().lower() not in ("", "new conversation"):
+        borrowed = title_from_request(fallback_title)
+        if borrowed != "Document":
+            title = borrowed
+    return normalise({"title": title, "subtitle": "", "blocks": blocks})

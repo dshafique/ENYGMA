@@ -46,10 +46,11 @@ def start(title: str, seed_term: str | None = None,
         return conn.execute("SELECT last_insert_rowid() AS id").fetchone()["id"]
 
 
-def _append(thread_id: int, role: str, body: str) -> None:
+def _append(thread_id: int, role: str, body: str, transient: bool = False) -> None:
     with cursor() as conn:
-        conn.execute("INSERT INTO chat_messages (thread_id, role, body) VALUES (?, ?, ?)",
-                     (thread_id, role, body))
+        conn.execute("INSERT INTO chat_messages (thread_id, role, body, transient) "
+                     "VALUES (?, ?, ?, ?)",
+                     (thread_id, role, body, 1 if transient else 0))
         conn.execute("UPDATE chat_threads SET updated_at = datetime('now') WHERE id = ?",
                      (thread_id,))
 
@@ -79,11 +80,15 @@ def say(thread_id: int, body: str) -> dict:
     wanted = documents.detect(body)
     if wanted:
         made, reply = _make_document(thread_id, body, wanted, history)
-        _append(thread_id, "enygma", reply)
+        # A failure is shown to him but never taught to the model.
+        _append(thread_id, "enygma", reply, transient=made is None)
         return {"reply": reply, "made": made}
 
     reply = _answer(body, caveat=_first_reply(thread_id), history=history)
-    _append(thread_id, "enygma", reply)
+    # "I could not reach the model just now" is a fact about one second, not a
+    # standing property of the app, and must not become part of what it knows.
+    _append(thread_id, "enygma", reply,
+            transient=reply.startswith("I could not reach the model"))
     return {"reply": reply}
 
 
@@ -97,7 +102,14 @@ def _make_document(thread_id: int, body: str, fmt: str,
     if found["text"]:
         context += "\n\nFrom his library:\n" + found["text"]
     try:
-        row = made.create(body, fmt, context=context, thread_id=thread_id)
+        title = ""
+        with cursor() as conn:
+            found = conn.execute("SELECT title FROM chat_threads WHERE id = ?",
+                                 (thread_id,)).fetchone()
+            if found and found["title"] != "New conversation":
+                title = found["title"]
+        row = made.create(body, fmt, context=context, thread_id=thread_id,
+                          fallback_title=title)
     except Exception as exc:
         return None, (f"I could not build that {documents.NAMES[fmt].lower()}: {exc}")
     return row, (f"Here is your {documents.NAMES[fmt].lower()}, "
@@ -126,6 +138,7 @@ def _history(thread_id: int, turns: int = 12) -> list[dict]:
     with cursor() as conn:
         rows = conn.execute(
             "SELECT role, body FROM chat_messages WHERE thread_id = ? "
+            "  AND transient = 0 "
             "ORDER BY id DESC LIMIT ?", (thread_id, turns)).fetchall()
     return [{"role": r["role"], "body": r["body"]} for r in reversed(rows)]
 

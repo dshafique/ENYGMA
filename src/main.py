@@ -681,7 +681,8 @@ async def chat_document(thread_id: int, request: Request):
     brief = brief or f"Make a document from this conversation: {found['thread']['title']}"
     try:
         row = made_repo.create(brief, fmt, context="\n\n".join(material),
-                               thread_id=thread_id, style=style)
+                               thread_id=thread_id, style=style,
+                               fallback_title=found["thread"]["title"])
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
     return {"made": {k: row[k] for k in

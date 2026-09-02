@@ -679,6 +679,22 @@ $("#retry")?.addEventListener("click", async (e) => {
 
 /* ------------------------------------------------------- documents he asks for */
 {
+  /* The files sheet. Opening it must not move the writing bar, which is why the
+     list is a sheet over the top rather than a panel that pushes it. */
+  const sheet = $("#filesheet");
+  const open = (on) => {
+    if (!sheet) return;
+    sheet.hidden = !on;
+    document.documentElement.classList.toggle("sheet-open", on);
+    if (on) sheet.querySelector(".madefile, #filesheet-close")?.focus();
+  };
+  $("#filesbtn")?.addEventListener("click", () => open(true));
+  $("#filesheet-close")?.addEventListener("click", () => open(false));
+  sheet?.addEventListener("click", (e) => { if (e.target === sheet) open(false); });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && sheet && !sheet.hidden) open(false);
+  });
+
   /* Save as. Building a real document takes a few seconds, so the control says
      so rather than sitting there looking broken -- which is what he was
      pressing Return at, last time something took a while with no sign of it. */

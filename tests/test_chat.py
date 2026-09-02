@@ -217,3 +217,42 @@ def test_the_newest_answer_is_scrolled_to_on_a_phone_too():
     chat = js[js.index("-------- chat */"):js.index("------- settings */")]
     assert "window.scrollTo" in chat
     assert "convo.scrollHeight > convo.clientHeight" in chat
+
+
+# ------------------------------------------------- a failure is not a fact
+
+def test_a_failure_is_shown_to_him_but_never_taught_to_the_model():
+    """Real, and he saw it. A document failed to save while the store was
+    pointed at a read-only directory. The error was appended to the thread as an
+    ENYGMA turn, and once Chat had memory every later answer read it back and
+    reasoned from it: "Because my environment has a read-only file system limit,
+    copy the raw text block above and save it yourself." The bug was fixed within
+    the hour; the thread went on repeating it, because to the model it was simply
+    something ENYGMA had said about itself.
+    """
+    import tempfile as _tf
+    from src import chat, db as _db, config as _cfg
+    from src.ingest import upload as _up
+    tmp = pathlib.Path(_tf.mkdtemp())
+    _cfg.DB_PATH = tmp / "t.db"; _cfg.DATA_DIR = tmp
+    _db.DB_PATH = _cfg.DB_PATH; _db.DATA_DIR = _cfg.DATA_DIR
+    _up.UPLOADS = tmp / "uploads"; _up.BASE_DIR = tmp
+    _db.migrate()
+
+    thread_id = chat.start("Tent build")
+    chat._append(thread_id, "operator", "make me a file")
+    chat._append(thread_id, "enygma",
+                 "I could not build that markdown: [Errno 30] Read-only file system",
+                 transient=True)
+    chat._append(thread_id, "operator", "how should I log the sensors?")
+    chat._append(thread_id, "enygma", "Keep one file per day under docs/.")
+
+    # He still sees it.
+    shown = [m["body"] for m in chat.thread(thread_id)["messages"]]
+    assert any("Errno 30" in b for b in shown), "the error vanished from his screen"
+
+    # The model never does.
+    remembered = " ".join(t["body"] for t in chat._history(thread_id))
+    assert "Errno 30" not in remembered, "the failure is still being taught"
+    assert "Read-only" not in remembered
+    assert "Keep one file per day" in remembered, "real turns were dropped too"

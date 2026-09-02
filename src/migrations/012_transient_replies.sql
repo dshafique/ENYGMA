@@ -1,0 +1,15 @@
+-- A failure is not a fact about the world.
+--
+-- Chat gained memory, which was right, and then the memory started teaching it
+-- things that were only ever true for one second. A document failed to save
+-- while the store was pointed at a read-only directory, the error was appended
+-- to the thread as an ENYGMA turn, and from then on every answer in that thread
+-- read it back and reasoned from it: "Because my environment has a read-only
+-- file system limit, copy the raw text block above and save it yourself."
+--
+-- The bug was fixed within the hour. The thread went on repeating it, because
+-- to the model it was simply something ENYGMA had said about itself.
+--
+-- So: a turn can be marked transient. It stays on screen, because he should see
+-- what happened, and it is left out of the history the model is given.
+ALTER TABLE chat_messages ADD COLUMN transient INTEGER NOT NULL DEFAULT 0;
