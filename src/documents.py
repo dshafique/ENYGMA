@@ -23,6 +23,8 @@ import io
 import re
 from html import escape
 
+from . import voice
+
 # md and html need nothing. The other four are imported where they are used, so
 # a missing wheel takes down one format with a clear message rather than the
 # whole module -- and, more to the point, the app still starts.
@@ -540,19 +542,83 @@ def _pdf(doc: dict, skin: dict, style: str) -> bytes:
 
 # ------------------------------------------------------------ the content
 
-BRIEF = """You are preparing a document for an engineering intern. Turn the
-material below into a real document: a title, and blocks of headings,
-paragraphs, bullets, numbered lists, tables, code and quotes.
+BRIEF = """You are preparing a document for an engineering intern to hand to
+somebody at work. Write it as him. It must not read as though a machine wrote
+it, because he is putting his name on it.
 
-Rules:
+How to write:
+  * Plain words. If a shorter word does the job, use it.
+  * Say the thing, give the number if there is one, then stop.
+  * Short sentences, one idea each.
+  * No selling and no throat-clearing. "Fixed the login bug" is finished.
+  * Do not introduce the document inside the document. No "here is your report",
+    no "this document aims to", no closing summary of what was just said.
+  * Do not open a bullet with a bolded label and a colon. Write the sentence.
+  * No emoji. No em dashes. No semicolons in ordinary prose.
+
+Never use these: leverage, utilise, delve, streamline, robust, seamless,
+spearhead, facilitate, synergy, holistic, impactful, actionable, deep dive,
+circle back, moving forward, key learnings, best practices, in conclusion,
+in summary, it is important to note, excited to share, I hope this helps.
+
+Technical words are not the problem and must not be avoided. I2C, MOSFET, pull-up
+resistor, bus address, calibration drift and the rest are what the document is
+about. Cut management vocabulary, never the engineering.
+
+What to produce:
+  * A title, then blocks of headings, paragraphs, bullets, numbered lists,
+    tables, code and quotes.
   * Use the material. Do not invent facts, names, numbers or dates that are not
     in it. Where the material leaves a blank, write a clearly marked placeholder
     in square brackets rather than a plausible guess.
-  * Put anything with repeating fields into a table. A table survives every
+  * Anything with repeating fields goes in a table. A table survives every
     format; a paragraph describing rows does not.
-  * Code, commands and file contents go in a code block, never in a paragraph.
-  * Plain language. No filler, no throat-clearing, no "in today's world".
-  * Never use an em dash."""
+  * Commands, code and file contents go in a code block, never in a paragraph."""
+
+
+# Blocks whose contents are data or code rather than prose. Rewriting the
+# typography inside these corrupts them: a shell command loses its semicolons,
+# a row of bus addresses loses its separators. Code is exempt from the word
+# check too, because a variable can legitimately be called leverage_ratio.
+_NOT_PROSE = {"code", "table"}
+_NEVER_READ = {"code"}
+
+
+def prose_of(doc: dict) -> list[str]:
+    """Every line in the document that is meant to read as English."""
+    lines = [doc.get("title", ""), doc.get("subtitle", "")]
+    for block in doc.get("blocks", []):
+        if block["type"] in _NEVER_READ:
+            continue
+        lines.append(block.get("text", ""))
+        lines += block.get("items", [])
+        if block["type"] == "table":
+            lines += block.get("columns", [])
+            for row in block.get("rows", []):
+                lines += row
+    return [line for line in lines if line]
+
+
+def enforce(doc: dict) -> dict:
+    """Put the prose right mechanically, leaving code and data alone.
+
+    The last resort, after the model has been asked twice. A document that still
+    says "leveraged" here keeps the word -- dropping a sentence out of a report
+    would change what it says -- but the typography and the bolded lead-in tic
+    are rewritten, because those change nothing except how it reads.
+    """
+    doc = dict(doc)
+    doc["title"] = voice.tidy(doc.get("title", ""))
+    doc["subtitle"] = voice.tidy(doc.get("subtitle", ""))
+    blocks = []
+    for block in doc.get("blocks", []):
+        block = dict(block)
+        if block["type"] not in _NOT_PROSE:
+            block["text"] = voice.tidy(block.get("text", ""))
+            block["items"] = [voice.tidy(x) for x in block.get("items", [])]
+        blocks.append(block)
+    doc["blocks"] = blocks
+    return doc
 
 
 def compose(brief: str, context: str = "", backend=None) -> dict:
@@ -565,19 +631,42 @@ def compose(brief: str, context: str = "", backend=None) -> dict:
     ask = f"{BRIEF}\n\nWhat he asked for:\n{brief}\n"
     if context:
         ask += f"\nThe material:\n{context}\n"
-    raw = backend._ask([{"type": "text", "text": ask}], schema=SCHEMA)
-    import json
-    try:
-        parsed = json.loads(raw)
-    except (json.JSONDecodeError, TypeError):
-        parsed = {}
-    doc = normalise(parsed)
+    doc = _one(backend, ask)
+
+    # Asked once, then asked again naming exactly what was wrong. A bare retry
+    # repeats the mistake with more confidence; naming it is what makes the
+    # second attempt different. Only the prose is read, so a command in a code
+    # block and a column of bus addresses cannot trigger a rewrite of the whole
+    # document.
+    wrong = voice.complaints(prose_of(doc))
+    if wrong:
+        retry = _one(backend, ask + (
+            "\n\nYour last attempt had these in it: " + "; ".join(wrong) +
+            ". Write it again without them. Keep every technical term and every "
+            "number exactly as it was; it is only the way it is written that is "
+            "wrong."))
+        # Keep the retry only if it is actually better. A second attempt that
+        # reads worse is not an improvement just because it is second.
+        if len(voice.complaints(prose_of(retry))) < len(wrong) and retry["blocks"]:
+            doc = retry
+
+    doc = enforce(doc)
     if not doc["blocks"]:
         # A document with nothing in it is worse than an honest refusal, because
         # it downloads and opens and looks like the feature worked.
         raise ValueError("The model did not return anything that could be made "
                          "into a document. Try asking again, more specifically.")
     return doc
+
+
+def _one(backend, ask: str) -> dict:
+    import json
+    raw = backend._ask([{"type": "text", "text": ask}], schema=SCHEMA)
+    try:
+        parsed = json.loads(raw)
+    except (json.JSONDecodeError, TypeError):
+        parsed = {}
+    return normalise(parsed)
 
 
 # The asking, as opposed to the thing asked for. "Can you make me a .md file for

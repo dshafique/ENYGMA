@@ -8,7 +8,7 @@ When no model is reachable the reply says so rather than inventing an answer. A
 glossary hit is still returned, because that is real knowledge the app has.
 """
 from .db import cursor
-from . import glossary, library, documents
+from . import glossary, library, documents, voice
 from .config import config
 
 NO_MODEL = (
@@ -180,7 +180,19 @@ def _answer(question: str, caveat: bool = True,
         prompt = (
             "You are ENYGMA, answering an engineering intern in an ongoing "
             "conversation. Be direct and concrete. Three short paragraphs at "
-            "most. If you are not sure, say so."
+            "most. If you are not sure, say so.\n\n"
+            "He puts what you write in front of people at work, so it must not "
+            "read as though a machine wrote it. Plain words. Short sentences. "
+            "No emoji, no em dashes. Do not open a bullet with a bolded label "
+            "and a colon; write the sentence. Do not introduce your answer "
+            "before giving it and do not summarise it afterwards. Never use: "
+            "leverage, utilise, delve, streamline, robust, seamless, "
+            "facilitate, holistic, actionable, deep dive, moving forward, "
+            "key learnings, best practices, in conclusion, in summary, "
+            "it is important to note, I hope this helps.\n"
+            "Technical words are not the problem and must not be avoided. I2C, "
+            "MOSFET, pull-up resistor and the rest are the substance. Cut the "
+            "management vocabulary, never the engineering."
         )
         # Without this the thread had no memory: every turn was answered cold,
         # so "what about the second one?" was unanswerable and the same sentence
@@ -202,6 +214,19 @@ def _answer(question: str, caveat: bool = True,
                 "if they do not answer the question:\n\n" + found["text"]
             )
         answer = backend._ask([{"type": "text", "text": prompt}], schema=None).strip()
+
+        # Asked once, then asked again naming exactly what was wrong. Fenced
+        # code is not read, so a semicolon in a shell command cannot trigger it.
+        wrong = voice.complaints(voice.prose_lines(answer))
+        if wrong:
+            again = backend._ask([{"type": "text", "text": prompt + (
+                "\n\nYour last answer had these in it: " + "; ".join(wrong) +
+                ". Say the same thing again without them. Keep every technical "
+                "term and every command exactly as it was.")}], schema=None).strip()
+            if again and len(voice.complaints(voice.prose_lines(again))) < len(wrong):
+                answer = again
+        answer = voice.tidy_markdown(answer)
+
         if found["sources"]:
             # Which documents were drawn on, so a claim can be traced.
             names = ", ".join(s["title"] for s in found["sources"])

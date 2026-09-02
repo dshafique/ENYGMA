@@ -26,6 +26,7 @@ import json
 import re
 from datetime import date, datetime, timedelta
 
+from . import voice
 from .db import cursor
 from .config import config
 
@@ -49,51 +50,20 @@ Never use an em dash or a semicolon.
 Between three and five bullets per section. Each one a fact he could be asked
 about. If there is not enough real material for three, write fewer."""
 
-# The tells. Present tense of the check that matters: if any of these survive,
-# the note reads like it came from a machine and the whole point is lost.
-BANNED = (
-    "leverage", "leveraged", "leveraging", "utilise", "utilize", "utilised",
-    "utilized", "delve", "streamline", "streamlined", "streamlining", "robust",
-    "seamless", "seamlessly", "spearhead", "spearheaded", "facilitate",
-    "facilitated", "synergy", "synergies", "deep dive", "circle back", "holistic",
-    "impactful", "key learnings", "key takeaways", "excited to share",
-    "pleased to report", "i had the opportunity", "moving forward",
-    "at the end of the day", "in today's fast-paced", "game changer",
-    "best practices", "actionable insights", "value add", "touch base",
-)
-
-# Typographic tells. An em dash in a Friday email is a fingerprint.
-_DASHES = re.compile(r"\s*[—–]\s*")
-_SEMICOLON = re.compile(r"\s*;\s*")
-_QUOTES = str.maketrans({"‘": "'", "’": "'", "“": '"', "”": '"'})
-
-
-def plain(text: str) -> str:
-    """Strip the typography a person typing an email would not produce.
-
-    An em dash becomes a full stop when it is doing a full stop's job and a comma
-    otherwise, judged by whether what follows could stand alone. Getting this
-    exactly right needs a parser; getting it right enough needs a comma, which is
-    never wrong, only sometimes weaker.
-    """
-    text = (text or "").translate(_QUOTES)
-    text = _DASHES.sub(", ", text)
-    text = _SEMICOLON.sub(", ", text)
-    text = re.sub(r"\s+", " ", text).strip()
-    return re.sub(r",\s*,", ",", text)
-
-
-def offences(lines: list[str]) -> list[str]:
-    """Which banned words actually survived. Named, so a failure is debuggable."""
-    joined = " ".join(lines).lower()
-    return sorted({word for word in BANNED if word in joined})
+# The words, the typography and the shapes all live in src/voice.py now, so the
+# Friday note and every generated document are held to one rule rather than two
+# copies of it that drift. These names are kept because this module's callers
+# and its tests read them.
+BANNED = voice.BANNED
+plain = voice.plain
+offences = voice.offences
 
 
 def clean(lines: list[str]) -> list[str]:
     """Plain typography, no empties, no numbering the template already provides."""
     out = []
     for line in lines or []:
-        line = plain(str(line))
+        line = voice.tidy(str(line))
         line = re.sub(r"^\s*(?:[-*•]|\d+[.)])\s*", "", line)
         if line:
             out.append(line[:400])
