@@ -8,7 +8,7 @@ When no model is reachable the reply says so rather than inventing an answer. A
 glossary hit is still returned, because that is real knowledge the app has.
 """
 from .db import cursor
-from . import glossary, library
+from . import glossary, library, documents
 from .config import config
 
 NO_MODEL = (
@@ -72,9 +72,37 @@ def say(thread_id: int, body: str) -> dict:
     history = _history(thread_id)
     _append(thread_id, "operator", body)
     _title_from_first(thread_id, body)
+
+    # He asked for a file. Give him a file, not a fenced code block he has to
+    # select by hand on a phone -- which is exactly what happened the first time
+    # he asked for one.
+    wanted = documents.detect(body)
+    if wanted:
+        made, reply = _make_document(thread_id, body, wanted, history)
+        _append(thread_id, "enygma", reply)
+        return {"reply": reply, "made": made}
+
     reply = _answer(body, caveat=_first_reply(thread_id), history=history)
     _append(thread_id, "enygma", reply)
     return {"reply": reply}
+
+
+def _make_document(thread_id: int, body: str, fmt: str,
+                   history: list[dict]) -> tuple[dict | None, str]:
+    """Build the file, and say in one line what it is. The conversation carries
+    the material: "put that in a spreadsheet" means the thing just discussed."""
+    from . import made
+    context = _transcript(history)
+    found = library.context_for(body)
+    if found["text"]:
+        context += "\n\nFrom his library:\n" + found["text"]
+    try:
+        row = made.create(body, fmt, context=context, thread_id=thread_id)
+    except Exception as exc:
+        return None, (f"I could not build that {documents.NAMES[fmt].lower()}: {exc}")
+    return row, (f"Here is your {documents.NAMES[fmt].lower()}, "
+                 f"{row['filename']}. It is in this thread and in your Library, "
+                 f"so you can come back to it.")
 
 
 def _recent_duplicate(thread_id: int, body: str) -> str | None:

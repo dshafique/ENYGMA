@@ -40,15 +40,45 @@
       </header>
       <div class="convo-scroll" id="convo">
         {% for m in current.messages %}
-        <div class="turn {{ m.role }}">
+        <div class="turn {{ m.role }}" data-message="{{ m.id }}">
           <div class="who"><span class="label">{{ 'You' if m.role == 'operator' else 'ENYGMA' }}</span></div>
           <div class="bubble">{{ m.body }}</div>
+          {% if m.role == 'enygma' %}
+          <div class="saveas">
+            <label class="label" for="saveas-{{ m.id }}">Save as</label>
+            <select id="saveas-{{ m.id }}" class="saveas-pick" data-message="{{ m.id }}"
+                    aria-label="Save this answer as a file">
+              <option value="">Choose a format</option>
+              {% for key, label in formats %}
+              <option value="{{ key }}">{{ label }} (.{{ key }})</option>
+              {% endfor %}
+            </select>
+            <span class="msg dim" data-saymsg="{{ m.id }}"></span>
+          </div>
+          {% endif %}
         </div>
         {% else %}
         <div class="empty"><div class="cell"></div>
           <p>Ask anything. What you ask is what ENYGMA learns about how you work.</p></div>
         {% endfor %}
       </div>
+      {% if made %}
+      <div class="madefiles">
+        <span class="label">Files in this thread</span>
+        <div class="madelist">
+          {% for f in made %}
+          <a class="madefile" href="/files/{{ f.id }}" download="{{ f.filename }}">
+            <span class="ext mono">{{ f.format|upper }}</span>
+            <span class="grow">
+              <span class="fname">{{ f.filename }}</span>
+              <span class="fmeta">{{ f.bytes|filesize }}</span>
+            </span>
+            {{ i.icon('download') }}
+          </a>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
       <div class="composer">
         <form method="post" action="/chat/{{ current.thread.id }}/say" id="say">
           <textarea name="body" id="body" rows="1" placeholder="Ask ENYGMA"

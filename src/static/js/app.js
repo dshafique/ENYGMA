@@ -573,10 +573,35 @@ $("#retry")?.addEventListener("click", async (e) => {
 
   /* Typing hides the tab bar. Six tabs are 60px, and with a keyboard open on a
      folding phone's cover screen there is not much more than a hundred to
-     spend. */
+     spend.
+
+     Both halves below exist because of one bug. Hiding the bar on focus and
+     restoring it on blur meant that pressing Send blurred the box, which put
+     the bar back, which moved the composer up sixty pixels -- between his
+     finger going down and coming up. The button slid out from under his thumb
+     at the exact moment he pressed it, and nothing happened at all.
+
+     So: pressing Send does not take focus off the box, and the bar comes back
+     only once focus has genuinely left the composer, not while it is moving
+     around inside it. */
   const typing = (on) => document.documentElement.classList.toggle("typing", on);
-  body?.addEventListener("focus", () => { typing(true); setTimeout(toBottom, 250); });
-  body?.addEventListener("blur", () => typing(false));
+  const composer = form?.closest(".composer");
+
+  button?.addEventListener("pointerdown", (e) => e.preventDefault());
+  button?.addEventListener("mousedown", (e) => e.preventDefault());
+
+  let leaving = null;
+  composer?.addEventListener("focusin", () => {
+    clearTimeout(leaving);
+    typing(true);
+    setTimeout(toBottom, 250);
+  });
+  composer?.addEventListener("focusout", () => {
+    // A tick, so focus moving from the box to the button is not a departure.
+    leaving = setTimeout(() => {
+      if (!composer.contains(document.activeElement)) typing(false);
+    }, 120);
+  });
 
   /* Enter sends only where there is a Shift key to hold for a newline.
      On a phone the return key is the ONLY way to start a new line, and there is
@@ -649,6 +674,36 @@ $("#retry")?.addEventListener("click", async (e) => {
       body.disabled = false;
       if (button) button.disabled = false;
     }
+  });
+}
+
+/* ------------------------------------------------------- documents he asks for */
+{
+  /* Save as. Building a real document takes a few seconds, so the control says
+     so rather than sitting there looking broken -- which is what he was
+     pressing Return at, last time something took a while with no sign of it. */
+  $$(".saveas-pick").forEach((pick) => {
+    pick.addEventListener("change", async () => {
+      const fmt = pick.value;
+      if (!fmt) return;
+      const id = Number(pick.dataset.message);
+      const note = $(`[data-saymsg="${id}"]`);
+      const say = (t) => { if (note) note.textContent = t || ""; };
+      pick.disabled = true;
+      say("Building\u2026");
+      try {
+        const res = await post(`${location.pathname}/document`,
+                               { format: fmt, message_id: id });
+        say(`Made ${res.made.filename}`);
+        // Reload so the file appears in the thread's file list, where he will
+        // look for it again tomorrow.
+        setTimeout(() => location.reload(), 600);
+      } catch (e) {
+        say(e.data?.detail || "Could not build that one.");
+        pick.disabled = false;
+        pick.value = "";
+      }
+    });
   });
 }
 

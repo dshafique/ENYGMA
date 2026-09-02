@@ -204,7 +204,9 @@ def test_the_tabs_get_out_of_the_way_while_he_types():
     assert "html.typing .tabbar { display: none; }" in css
     chat = js[js.index("-------- chat */"):js.index("------- settings */")]
     assert 'classList.toggle("typing"' in chat
-    assert '"focus"' in chat and '"blur"' in chat
+    # focusin/focusout on the whole composer, not focus/blur on the box: see
+    # test_pressing_send_does_not_move_the_send_button for why that matters.
+    assert '"focusin"' in chat and '"focusout"' in chat
 
 
 def test_the_newest_answer_is_scrolled_to_on_a_phone_too():

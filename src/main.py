@@ -22,7 +22,8 @@ from .auth import session, passkeys, attempts, secrets_store
 from .ingest import poller, upload, notes as notes_ingest
 from .pipeline import runner
 from .export import as_markdown
-from . import weeknote
+from . import weeknote, documents
+from . import made as made_repo
 from . import (library, meetings as meetings_repo, actions as actions_repo,
                directory as directory_repo, chat as chat_repo, glossary,
                home as home_repo, fmt)
@@ -627,7 +628,10 @@ def chat_thread(thread_id: int, request: Request):
     if found is None:
         raise HTTPException(status_code=404, detail="No such thread")
     return page(request, "chat.html", "chat",
-                {"threads": chat_repo.threads(), "current": found})
+                {"threads": chat_repo.threads(), "current": found,
+                 "files": {f["id"]: f for f in made_repo.for_thread(thread_id)},
+                 "made": made_repo.for_thread(thread_id),
+                 "formats": [(f, documents.NAMES[f]) for f in documents.FORMATS]})
 
 
 @app.post("/chat/{thread_id}/say")
@@ -641,6 +645,61 @@ async def chat_say(thread_id: int, request: Request):
         return RedirectResponse(f"/chat/{thread_id}", status_code=303)
     chat_repo.say(thread_id, body)
     return RedirectResponse(f"/chat/{thread_id}", status_code=303)
+
+
+# --------------------------------------------------------------------------
+# documents ENYGMA makes
+# --------------------------------------------------------------------------
+@app.post("/chat/{thread_id}/document")
+async def chat_document(thread_id: int, request: Request):
+    """Save as. For when he already has an answer he wants to keep, rather than
+    a request he is about to type."""
+    require_session(request)
+    found = chat_repo.thread(thread_id)
+    if found is None:
+        raise HTTPException(status_code=404, detail="No such thread")
+    payload = await request.json()
+    fmt = str(payload.get("format") or "").lower()
+    if fmt not in documents.FORMATS:
+        raise HTTPException(status_code=400,
+                            detail=f"Not a format: {fmt or 'none given'}")
+    style = "enygma" if payload.get("style") == "enygma" else "plain"
+
+    # Which answer he pressed it on. Without a message the whole thread is the
+    # material, which is what "save this conversation" should mean.
+    message_id = payload.get("message_id")
+    material, brief = [], payload.get("brief") or ""
+    for m in found["messages"]:
+        material.append(("Operator: " if m["role"] == "operator" else "ENYGMA: ")
+                        + m["body"])
+        if message_id and m["id"] == message_id:
+            # Named for the thread, not for the instruction: "Turn this answer
+            # into a document" would otherwise become the document's title.
+            brief = brief or f"{found['thread']['title']}"
+            material = [m["body"]]
+            break
+    brief = brief or f"Make a document from this conversation: {found['thread']['title']}"
+    try:
+        row = made_repo.create(brief, fmt, context="\n\n".join(material),
+                               thread_id=thread_id, style=style)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    return {"made": {k: row[k] for k in
+                     ("id", "format", "title", "filename", "bytes")}}
+
+
+@app.get("/files/{made_id}")
+def made_file(made_id: int, request: Request):
+    """The download. Content-Disposition attachment, because a .md or .html
+    served inline opens in the browser instead of saving, and he asked for a
+    file."""
+    require_view(request)
+    found = made_repo.blob(made_id)
+    if found is None:
+        raise HTTPException(status_code=404, detail="That file is no longer here")
+    path, row = found
+    return FileResponse(path, media_type=row["mime"], filename=row["filename"],
+                        content_disposition_type="attachment")
 
 
 # --------------------------------------------------------------------------

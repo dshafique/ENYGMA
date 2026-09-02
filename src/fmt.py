@@ -120,7 +120,21 @@ def initials(name: str) -> str:
     return (parts[0][0] + parts[-1][0]).upper()
 
 
+def filesize(size) -> str:
+    """A size he can judge at a glance, on a phone, without doing arithmetic."""
+    try:
+        size = int(size or 0)
+    except (TypeError, ValueError):
+        return ""
+    if size < 1024:
+        return f"{size} B"
+    if size < 1024 * 1024:
+        return f"{size / 1024:.0f} KB"
+    return f"{size / (1024 * 1024):.1f} MB"
+
+
 FILTERS = {
     "hms": hms, "mmss": mmss, "hours": hours, "clock": clock,
     "longdate": longdate, "daygroup": daygroup, "ago": ago, "initials": initials,
+    "filesize": filesize,
 }

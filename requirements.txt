@@ -13,3 +13,12 @@ httpx==0.28.1
 # 'broken'.
 google-genai==2.20.0
 pytest==8.3.4
+
+# Documents he can actually open. All four are pip wheels with no system
+# packages behind them, which is what keeps the Spark's install a two minute
+# job: a renderer wanting LibreOffice or a headless browser would not survive
+# deploy/install-on-spark.sh on a machine with no display.
+python-docx==1.1.2
+python-pptx==1.0.2
+openpyxl==3.1.5
+reportlab==4.2.5

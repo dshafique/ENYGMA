@@ -157,7 +157,12 @@ a:hover { text-decoration: underline; }
   position: sticky; top: 0; z-index: 20;
   display: flex; align-items: center; justify-content: space-between;
   gap: var(--space-16); padding: var(--space-20) var(--space-32) var(--space-16);
-  background: var(--glass-fill);
+  /* Same treatment as the tab bar, and for the same reason: at 24px blur a line
+     of body text is still readable through plain glass, and a transcript
+     showing through the thread title reads as a rendering fault rather than as
+     depth. The tint goes over an opaque surface, not over the page. */
+  background-color: var(--surface);
+  background-image: linear-gradient(var(--glass-fill), var(--glass-fill));
   backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px);
   border-bottom: 1px solid var(--border-divider);
 }
@@ -528,6 +533,44 @@ pre.doc {
                          border-radius: var(--radius-md); padding: var(--space-12) var(--space-16); }
 .turn.enygma .bubble { color: var(--text-dim); }
 
+/* ======================================================================
+   Files ENYGMA made
+
+   A chip, not a card. It sits between the transcript and the writing bar so it
+   is the last thing above his thumb, and it is a plain <a download> so the
+   phone's own download machinery handles it rather than anything of ours.
+   ====================================================================== */
+.madefiles { border-top: 1px solid var(--border-divider); background: var(--surface);
+             padding: var(--space-12) var(--space-32) 0; }
+.madefiles > .label { display: block; margin-bottom: var(--space-8); }
+.madelist { max-width: var(--reading); margin: 0 auto; display: flex;
+            flex-direction: column; gap: var(--space-6); }
+.madefile { display: flex; align-items: center; gap: var(--space-12);
+            padding: var(--space-12);
+            border: 1px solid var(--border-rest); border-radius: var(--radius-md);
+            background: var(--surface-low); color: var(--text); }
+.madefile:hover { background: var(--surface-container); text-decoration: none; }
+.madefile .ext { flex: none; font-size: 10px; letter-spacing: .08em;
+                 padding: 3px var(--space-6); border-radius: var(--radius-sm);
+                 background: var(--surface-high); color: var(--text-dim); }
+.madefile .grow { min-width: 0; display: flex; flex-direction: column; }
+.madefile .fname { font-size: 14px; overflow: hidden; text-overflow: ellipsis;
+                   white-space: nowrap; }
+.madefile .fmeta { font-size: 11px; color: var(--text-muted); }
+.madefile .ico { flex: none; color: var(--text-muted); }
+
+.saveas { display: flex; align-items: center; gap: var(--space-8);
+          margin-top: var(--space-8); flex-wrap: wrap; }
+.saveas-pick { height: 30px; font-size: 12px; font-family: var(--font-prose);
+               background: var(--surface-low); color: var(--text-dim);
+               border: 1px solid var(--border-rest); border-radius: var(--radius-sm);
+               padding: 0 var(--space-6); max-width: 100%; }
+/* It is a convenience, not the point of the screen: visible when the answer is
+   wanted, quiet when it is being read. */
+.turn.enygma .saveas { opacity: .55; transition: opacity var(--dur-micro) var(--ease); }
+.turn.enygma:hover .saveas, .turn.enygma:focus-within .saveas { opacity: 1; }
+@media (hover: none) { .turn.enygma .saveas { opacity: 1; } }
+
 /* Stuck to the bottom of the screen, not to the end of the transcript.
    Before this it was an ordinary block at the end of a growing page, so four
    answers pushed it past the fold and he had to scroll the whole conversation
@@ -560,7 +603,11 @@ pre.doc {
   .chatwrap { grid-template-columns: minmax(0, 1fr); }
   .chatwrap.at-convo .threads { display: none; }
   .chatwrap:not(.at-convo) .convo { display: none; }
-  .convo-scroll, .composer { padding-left: var(--space-20); padding-right: var(--space-20); }
+  .convo-scroll, .composer, .madefiles {
+    padding-left: var(--space-20); padding-right: var(--space-20); }
+  /* Below the transcript, above the writing bar, and it must not eat the screen
+     when a thread has collected a few files. */
+  .madelist { max-height: 34vh; overflow-y: auto; }
   /* The tab bar is fixed over the bottom of the page, so sticking to 0 would
      park the composer underneath it. */
   .composer { bottom: calc(var(--tabbar) + env(safe-area-inset-bottom)); }
@@ -574,7 +621,8 @@ pre.doc {
 @media (max-width: 380px) {
   /* Cover-screen width. Every horizontal pixel spent on padding is one the
      sentence he is writing does not get. */
-  .convo-scroll, .composer { padding-left: var(--space-12); padding-right: var(--space-12); }
+  .convo-scroll, .composer, .madefiles {
+    padding-left: var(--space-12); padding-right: var(--space-12); }
   .composer form { gap: var(--space-6); }
   .composer form > .btn { padding: 0 var(--space-12); }
 }
