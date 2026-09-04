@@ -11,6 +11,8 @@ of them is really having.
 """
 from __future__ import annotations
 
+import time
+
 from .config import config
 
 # order, key, label, the note shown beside the picker, whether it can see images
@@ -48,6 +50,31 @@ def backend_for(name: str | None):
     return GeminiBackend()
 
 
+# Whether the local model can answer is a network call, and `offered()` runs on
+# every chat page render. Uncached, a stopped ollama turned every page load into
+# a four second wait -- the test suite went from eight seconds to twenty, which
+# is how this was noticed. Ten seconds is long enough to spare the round trip
+# and short enough that starting ollama shows up almost at once.
+_READY_FOR = 10.0
+_ready_cache: dict = {}
+
+
+def _local_ready() -> tuple[bool, str]:
+    now = time.monotonic()
+    cached = _ready_cache.get("local")
+    if cached and now - cached[0] < _READY_FOR:
+        return cached[1], cached[2]
+    from .pipeline.ollama import OllamaBackend
+    ready, why = OllamaBackend().available()
+    _ready_cache["local"] = (now, ready, why)
+    return ready, why
+
+
+def forget_readiness() -> None:
+    """For a test, or for the moment after he is told ollama is down."""
+    _ready_cache.clear()
+
+
 def offered() -> list[dict]:
     """What the picker shows, with anything unusable marked and said why.
 
@@ -58,8 +85,7 @@ def offered() -> list[dict]:
     for key, label, note, vision in CHOICES:
         ready, why = True, ""
         if key == "local":
-            from .pipeline.ollama import OllamaBackend
-            ready, why = OllamaBackend().available()
+            ready, why = _local_ready()
         elif key == "gemini":
             ready = config.has("ENYGMA_GEMINI_API_KEY")
             why = "" if ready else "no key set"

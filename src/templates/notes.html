@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% import "_icons.html" as i %}
+{% import "_bench.html" as bench %}
+{% block title %}Notes — ENYGMA{% endblock %}
+{% block main %}
+<div class="split{% if current %} at-detail{% endif %}">
+
+  <aside class="pane">
+    <div class="pane-head">
+      {{ bench.segments('notes') }}
+      <form method="post" action="/notes/new">
+        <button class="btn line sm" style="width:100%">{{ i.icon('plus') }} New note</button>
+      </form>
+    </div>
+    <div class="pane-scroll">
+      {% for n in notes %}
+      <a class="note-link{% if current and current.id == n.id %} on{% endif %}"
+         href="/notes/{{ n.id }}">
+        <div class="t">{{ n.title }}</div>
+        <div class="p">{{ n.preview }}</div>
+        <div class="m">{{ n.updated_at|ago }}{% if n.pinned %} · pinned{% endif %}</div>
+      </a>
+      {% else %}
+      <p class="empty">No notes yet.</p>
+      {% endfor %}
+    </div>
+  </aside>
+
+  <section class="detail">
+    {% if current %}
+    <header class="topbar">
+      <div class="grow">
+        <a class="btn ghost sm" href="/notes">{{ i.icon('back') }} Notes</a>
+        <h2 style="margin-top:var(--space-4)">{{ current.title }}</h2>
+        <p class="sub"><span id="notestate">{{ current.updated_at|ago }}</span></p>
+      </div>
+      <form method="post" action="/notes/{{ current.id }}/delete"
+            onsubmit="return confirm('Delete this note? It is not recoverable.')">
+        <button class="btn ghost sm" type="submit">Delete</button>
+      </form>
+    </header>
+    <div class="detail-inner">
+      <textarea class="notebody" id="notebody" data-note="{{ current.id }}"
+                placeholder="Write it down.">{{ current.body }}</textarea>
+    </div>
+    {% else %}
+    <div class="page"><div class="empty"><div class="cell"></div>
+      <h2>Somewhere to put it down</h2>
+      <p>Notes are yours. Nothing here is summarised, scored or sent to a model.
+         Anything you want ENYGMA to be able to quote back later goes in the
+         Library instead.</p></div></div>
+    {% endif %}
+  </section>
+
+</div>
+{% endblock %}

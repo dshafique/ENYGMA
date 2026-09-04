@@ -23,6 +23,9 @@ from .ingest import poller, upload, notes as notes_ingest
 from .pipeline import runner
 from .export import as_markdown
 from . import weeknote, documents
+from . import bench as bench_repo
+from . import models
+from . import attachments
 from . import made as made_repo
 from . import (library, meetings as meetings_repo, actions as actions_repo,
                directory as directory_repo, chat as chat_repo, glossary,
@@ -627,10 +630,16 @@ def chat_thread(thread_id: int, request: Request):
     found = chat_repo.thread(thread_id)
     if found is None:
         raise HTTPException(status_code=404, detail="No such thread")
+    for message in found["messages"]:
+        message["files"] = attachments.for_message(message["id"])
+    chosen = chat_repo.model_of(thread_id)
+    found["model"] = chosen
+    found["note"] = models.NOTES[chosen]
     return page(request, "chat.html", "chat",
                 {"threads": chat_repo.threads(), "current": found,
-                 "files": {f["id"]: f for f in made_repo.for_thread(thread_id)},
                  "made": made_repo.for_thread(thread_id),
+                 "offered": models.offered(),
+                 "waiting": attachments.pending(thread_id),
                  "formats": [(f, documents.NAMES[f]) for f in documents.FORMATS]})
 
 
@@ -645,6 +654,140 @@ async def chat_say(thread_id: int, request: Request):
         return RedirectResponse(f"/chat/{thread_id}", status_code=303)
     chat_repo.say(thread_id, body)
     return RedirectResponse(f"/chat/{thread_id}", status_code=303)
+
+
+@app.post("/chat/{thread_id}/attach")
+async def chat_attach(thread_id: int, request: Request):
+    """A photograph of the bench, or a datasheet. Held against the thread until
+    the next message goes, so he can attach then type rather than the reverse."""
+    require_session(request)
+    if chat_repo.thread(thread_id) is None:
+        raise HTTPException(status_code=404, detail="No such thread")
+    form = await request.form()
+    out, refused = [], []
+    for item in form.getlist("files"):
+        if not getattr(item, "filename", ""):
+            continue
+        try:
+            row = attachments.attach(thread_id, item.filename, await item.read())
+            out.append({k: row[k] for k in ("id", "filename", "kind", "bytes")})
+        except attachments.Refused as why:
+            refused.append({"filename": item.filename, "why": str(why)})
+        finally:
+            await item.close()
+    return {"attached": out, "refused": refused}
+
+
+@app.post("/chat/attachments/{attachment_id}/remove")
+def chat_unattach(attachment_id: int, request: Request):
+    require_session(request)
+    row = attachments.get(attachment_id)
+    if row is None or row["message_id"] is not None:
+        raise HTTPException(status_code=404, detail="Not waiting to be sent")
+    with cursor() as conn:
+        conn.execute("DELETE FROM attachments WHERE id = ?", (attachment_id,))
+    return {"removed": attachment_id}
+
+
+@app.get("/attachments/{attachment_id}")
+def attachment_file(attachment_id: int, request: Request):
+    require_view(request)
+    found = attachments.blob(attachment_id)
+    if found is None:
+        raise HTTPException(status_code=404, detail="That file is no longer here")
+    path, row = found
+    # An image is shown, so it is served inline. Everything else downloads.
+    inline = row["kind"] == "image"
+    return FileResponse(path, media_type=row["mime"], filename=row["filename"],
+                        content_disposition_type="inline" if inline else "attachment")
+
+
+@app.post("/chat/{thread_id}/model")
+async def chat_model(thread_id: int, request: Request):
+    """Which model answers in this thread. Per thread, because Chat has memory."""
+    require_session(request)
+    if chat_repo.thread(thread_id) is None:
+        raise HTTPException(status_code=404, detail="No such thread")
+    body = await request.json()
+    chosen = chat_repo.set_model(thread_id, str(body.get("model") or ""))
+    return {"model": chosen, "note": models.NOTES[chosen]}
+
+
+# --------------------------------------------------------------------------
+# the bench: backlog and notes
+# --------------------------------------------------------------------------
+def _bench_context(**extra) -> dict:
+    return dict({"kinds": [(k, bench_repo.KIND_LABELS[k]) for k in bench_repo.KINDS]},
+                **extra)
+
+
+@app.get("/backlog", response_class=HTMLResponse)
+def backlog_page(request: Request):
+    if current(request) is None:
+        return RedirectResponse("/lock", status_code=302)
+    data = bench_repo.listing()
+    return page(request, "backlog.html", "bench",
+                _bench_context(open=data["open"], done=data["done"]))
+
+
+@app.post("/backlog")
+async def backlog_add(request: Request):
+    require_session(request)
+    form = await request.form()
+    try:
+        bench_repo.add(str(form.get("text") or ""), str(form.get("kind") or "bug"))
+    except ValueError:
+        pass
+    return RedirectResponse("/backlog", status_code=303)
+
+
+@app.post("/backlog/{entry_id}/state")
+async def backlog_state(entry_id: int, request: Request):
+    """Crossed off, or put back. The note is what makes two states enough."""
+    require_session(request)
+    body = await request.json()
+    row = bench_repo.cross_off(entry_id, bool(body.get("done")), body.get("note"))
+    if row is None:
+        raise HTTPException(status_code=404, detail="No such entry")
+    return {"entry": row}
+
+
+@app.get("/notes", response_class=HTMLResponse)
+@app.get("/notes/{note_id}", response_class=HTMLResponse)
+def notes_page(request: Request, note_id: int | None = None):
+    if current(request) is None:
+        return RedirectResponse("/lock", status_code=302)
+    found = bench_repo.note(note_id) if note_id else None
+    if note_id and found is None:
+        raise HTTPException(status_code=404, detail="No such note")
+    return page(request, "notes.html", "bench",
+                _bench_context(notes=bench_repo.notes(), current=found))
+
+
+@app.post("/notes/new")
+def notes_new(request: Request):
+    require_session(request)
+    created = bench_repo.new_note()
+    return RedirectResponse(f"/notes/{created['id']}", status_code=303)
+
+
+@app.post("/notes/{note_id}")
+async def notes_save(note_id: int, request: Request):
+    require_session(request)
+    body = await request.json()
+    saved = bench_repo.save_note(note_id, body.get("title"), body.get("body"))
+    if saved is None:
+        raise HTTPException(status_code=404, detail="No such note")
+    return {"note": {k: saved[k] for k in ("id", "title", "updated_at")}}
+
+
+@app.post("/notes/{note_id}/delete")
+def notes_delete(note_id: int, request: Request):
+    require_session(request)
+    bench_repo.remove_note(note_id)
+    return RedirectResponse("/notes", status_code=303)
+
+
 
 
 # --------------------------------------------------------------------------

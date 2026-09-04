@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% import "_icons.html" as i %}
+{% import "_bench.html" as bench %}
+{% block title %}Backlog — ENYGMA{% endblock %}
+{% block main %}
+<header class="topbar">
+  <div class="grow">
+    <h1>Bench</h1>
+    <p class="sub">{{ open|length }} open{% if done %} · {{ done|length }} crossed off{% endif %}</p>
+  </div>
+</header>
+
+<div class="page measure">
+  {{ bench.segments('backlog') }}
+
+  <form class="addbox" id="addbox" method="post" action="/backlog">
+    <div class="kinds" role="radiogroup" aria-label="What is it">
+      {% for key, label in kinds %}
+      <label class="kind">
+        <input type="radio" name="kind" value="{{ key }}" {{ 'checked' if loop.first }}>
+        <span>{{ label }}</span>
+      </label>
+      {% endfor %}
+    </div>
+    <textarea name="text" id="entry" rows="1" required maxlength="2000"
+              placeholder="What happened, or what to try"></textarea>
+    <button class="btn sm" type="submit">Add</button>
+  </form>
+
+  {% if open %}
+  <div class="block">
+    <span class="label">Open · {{ open|length }}</span>
+    {% for e in open %}
+    <div class="item entry" data-entry="{{ e.id }}">
+      <input type="checkbox" data-cross="{{ e.id }}" aria-label="Cross off: {{ e.text }}">
+      <span class="txt">
+        <span class="what">{{ e.text }}</span>
+        <span class="where"><span class="ref mono">#{{ e.id }}</span>
+          <span class="kindtag">{{ e.kind }}</span> {{ e.created_at|ago }}</span>
+      </span>
+    </div>
+    {% endfor %}
+  </div>
+  {% elif not done %}
+  <div class="empty"><div class="cell"></div>
+    <p>Nothing waiting. Anything you type above lands here and stays until
+       somebody crosses it off.</p></div>
+  {% endif %}
+
+  {% if done %}
+  <div class="block">
+    <span class="label">Crossed off · {{ done|length }}</span>
+    {% for e in done %}
+    <div class="item entry done" data-entry="{{ e.id }}">
+      <input type="checkbox" checked data-cross="{{ e.id }}"
+             aria-label="Put back: {{ e.text }}">
+      <span class="txt">
+        <span class="what">{{ e.text }}</span>
+        <span class="where"><span class="ref mono">#{{ e.id }}</span>
+          <span class="kindtag">{{ e.kind }}</span> {{ e.done_at|ago }}
+          {%- if e.note %} · {{ e.note }}{% endif %}</span>
+      </span>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+
+<div class="sheet-scrim" id="whysheet" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="why-title">
+    <h2 id="why-title">Crossed off</h2>
+    <p class="dim">One line on why, so whoever raised it knows whether it was
+       fixed or turned down. Skip it if it is obvious.</p>
+    <input class="whyfield" id="whyfield" type="text" maxlength="200"
+           placeholder="Fixed with 4.7k pull-ups" aria-label="Why">
+    <button class="btn" id="whysave" type="button">Done</button>
+    <button class="btn ghost" id="whyskip" type="button">Skip</button>
+  </div>
+</div>
+{% endblock %}

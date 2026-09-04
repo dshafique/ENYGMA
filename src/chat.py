@@ -8,7 +8,7 @@ When no model is reachable the reply says so rather than inventing an answer. A
 glossary hit is still returned, because that is real knowledge the app has.
 """
 from .db import cursor
-from . import glossary, library, documents, voice, models
+from . import glossary, library, documents, voice, models, attachments
 from .config import config
 
 NO_MODEL = (
@@ -72,6 +72,16 @@ def say(thread_id: int, body: str) -> dict:
         return {"reply": repeat, "duplicate": True}
     history = _history(thread_id)
     _append(thread_id, "operator", body)
+    with cursor() as conn:
+        mine = conn.execute(
+            "SELECT id FROM chat_messages WHERE thread_id = ? ORDER BY id DESC LIMIT 1",
+            (thread_id,)).fetchone()
+    # claim() returns what it just tied to this message, and that is what goes
+    # to the model. Reading pending() again afterwards returns nothing, which is
+    # a bug that looks completely correct from the outside: the image is stored,
+    # tied to the right message and shown back on screen, and the model never
+    # saw it.
+    brought = attachments.claim(thread_id, mine["id"]) if mine else []
     _title_from_first(thread_id, body)
 
     # He asked for a file. Give him a file, not a fenced code block he has to
@@ -85,7 +95,7 @@ def say(thread_id: int, body: str) -> dict:
         return {"reply": reply, "made": made}
 
     reply = _answer(body, caveat=_first_reply(thread_id), history=history,
-                    model=model_of(thread_id))
+                    model=model_of(thread_id), brought=brought)
     # "I could not reach the model just now" is a fact about one second, not a
     # standing property of the app, and must not become part of what it knows.
     _append(thread_id, "enygma", reply,
@@ -192,7 +202,8 @@ def set_model(thread_id: int, name: str) -> str:
 
 def _answer(question: str, caveat: bool = True,
             history: list[dict] | None = None,
-            model: str | None = None) -> str:
+            model: str | None = None,
+            brought: list[dict] | None = None) -> str:
     hit = glossary.lookup(_probable_term(question))
     found = library.context_for(question)
 
@@ -250,7 +261,13 @@ def _answer(question: str, caveat: bool = True,
                 "them over your general knowledge where they disagree, and say so "
                 "if they do not answer the question:\n\n" + found["text"]
             )
-        answer = backend._ask([{"type": "text", "text": prompt}], schema=None).strip()
+        parts, described = attachments.parts_for(brought or [])
+        if described:
+            prompt += (f"\n\nHe has attached {described}. Answer about what is "
+                       "actually there. If you cannot make something out, say so "
+                       "rather than guessing at it.")
+        answer = backend._ask([{"type": "text", "text": prompt}] + parts,
+                              schema=None).strip()
 
         # Asked once, then asked again naming exactly what was wrong. Fenced
         # code is not read, so a semicolon in a shell command cannot trigger it.

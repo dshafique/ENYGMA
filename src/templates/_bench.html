@@ -1,0 +1,10 @@
+{% macro segments(here) %}
+{# One tab, two surfaces. The segmented control is the only navigation between
+   them, so it sits at the top of both and never moves. #}
+<div class="segments" role="tablist">
+  <a class="segment{% if here == 'backlog' %} on{% endif %}" href="/backlog"
+     role="tab" aria-selected="{{ 'true' if here == 'backlog' else 'false' }}">Backlog</a>
+  <a class="segment{% if here == 'notes' %} on{% endif %}" href="/notes"
+     role="tab" aria-selected="{{ 'true' if here == 'notes' else 'false' }}">Notes</a>
+</div>
+{% endmacro %}

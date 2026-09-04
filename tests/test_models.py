@@ -220,3 +220,35 @@ def test_stub_mode_overrides_the_picker_entirely():
         assert SEEN == [], "stub mode still called out to ollama"
     finally:
         cfg.config.PIPELINE = was
+
+
+def test_the_picker_does_not_dial_ollama_on_every_page_render():
+    """Uncached, a stopped ollama turned every chat page load into a four second
+    wait: the suite went from eight seconds to twenty, which is how this was
+    found. A page render must not pay for a network round trip it just paid."""
+    import time
+    from src import models
+    models.forget_readiness()
+    models.offered()                       # warms it
+    started = time.monotonic()
+    for _ in range(50):
+        models.offered()
+    spent = time.monotonic() - started
+    assert spent < 0.5, f"50 renders took {spent:.2f}s; the check is not cached"
+
+
+def test_a_stopped_ollama_does_not_hang_the_page():
+    from src import models, config as c
+    was = c.config.OLLAMA_HOST
+    try:
+        c.config.OLLAMA_HOST = "http://127.0.0.1:1"   # nothing listening
+        models.forget_readiness()
+        import time
+        started = time.monotonic()
+        by_key = {m["key"]: m for m in models.offered()}
+        assert time.monotonic() - started < 4.0
+        assert by_key["local"]["ready"] is False
+        assert by_key["local"]["why"], "it should say why, not just fail"
+    finally:
+        c.config.OLLAMA_HOST = was
+        models.forget_readiness()

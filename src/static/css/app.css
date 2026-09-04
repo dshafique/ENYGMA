@@ -733,3 +733,133 @@ pre.doc {
 .shell { min-height: 100dvh; display: grid; place-items: center; padding: var(--space-24); }
 .stack { display: flex; flex-direction: column; align-items: center; gap: var(--space-16); text-align: center; }
 .stack .panel { width: min(560px, 100%); text-align: left; }
+
+
+/* ======================================================================
+   Backlog
+
+   One box at the top and one list under it. He is standing at a bench with
+   one hand free, so the whole thing has to work in a sentence and a tap.
+   ====================================================================== */
+.addbox { display: grid; grid-template-columns: 1fr auto; gap: var(--space-8);
+          align-items: end; margin-bottom: var(--space-32); }
+.addbox .kinds { grid-column: 1 / -1; display: flex; gap: var(--space-6); }
+.addbox textarea {
+  min-height: 44px; max-height: 160px; resize: none; padding: var(--space-12);
+  border-radius: var(--radius-sm); border: 1px solid var(--border-rest);
+  background: var(--surface-low); color: var(--text);
+  font-family: var(--font-prose); font-size: 15px; line-height: 20px; min-width: 0;
+}
+.kind { position: relative; }
+.kind input { position: absolute; opacity: 0; pointer-events: none; }
+.kind span {
+  display: inline-flex; align-items: center; height: 28px; padding: 0 var(--space-12);
+  border-radius: var(--radius-pill); border: 1px solid var(--border-rest);
+  background: var(--surface-low); color: var(--text-muted);
+  font-family: var(--font-mono); font-size: 11px; letter-spacing: .06em;
+  text-transform: uppercase; cursor: pointer;
+}
+.kind input:checked + span { background: var(--accent); color: var(--on-accent);
+                             border-color: var(--accent); }
+.kind input:focus-visible + span { outline: 2px solid var(--border-strong);
+                                   outline-offset: 2px; }
+
+/* The kind is a quiet tag, not a colour code. Hierarchy from value, as
+   everywhere else: a bug is not more important than an idea, it is different. */
+.kindtag { font-family: var(--font-mono); font-size: 10px; letter-spacing: .08em;
+           text-transform: uppercase; padding: 2px var(--space-6);
+           border-radius: var(--radius-sm); background: var(--surface-container);
+           color: var(--text-dim); margin-right: var(--space-6); }
+.item.entry { align-items: flex-start; }
+.item.entry .what { font-size: 15px; line-height: 22px; }
+.item.entry.done .what { text-decoration: line-through; color: var(--text-muted); }
+
+.ref { font-size: 10px; color: var(--text-muted); margin-right: var(--space-6); }
+
+/* Notes. Deliberately the plainest surface in the app: a page and a margin. */
+.note-link { display: block; padding: var(--space-12); border-radius: var(--radius-md);
+             color: inherit; margin-bottom: var(--space-4); }
+.note-link:hover { background: var(--surface-low); text-decoration: none; }
+.note-link.on { background: var(--surface-container); }
+.note-link .t { font-size: 15px; font-weight: 600; }
+.note-link .p { font-size: 13px; color: var(--text-muted); margin-top: var(--space-2);
+                overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.note-link .m { font-family: var(--font-mono); font-size: 10px; letter-spacing: .06em;
+                text-transform: uppercase; color: var(--text-muted);
+                margin-top: var(--space-6); }
+.notebody { width: 100%; max-width: var(--reading); min-height: 60vh;
+            font-family: var(--font-prose); font-size: 16px; line-height: 27px;
+            color: var(--text-dim); background: none; border: 0; resize: none;
+            padding: 0; }
+.notebody:focus { outline: none; }
+
+/* One tab, two surfaces. */
+.segments { display: flex; gap: var(--space-4); padding: 3px;
+            background: var(--surface-low); border: 1px solid var(--border-divider);
+            border-radius: var(--radius-pill); margin-bottom: var(--space-20); }
+.segment { flex: 1; text-align: center; padding: var(--space-6) var(--space-12);
+           border-radius: var(--radius-pill); color: var(--text-muted);
+           font-size: 13px; font-weight: 500; }
+.segment:hover { color: var(--text); text-decoration: none; }
+.segment.on { background: var(--surface); color: var(--text);
+              box-shadow: 0 1px 2px rgba(0,0,0,.10); }
+
+.whyfield { width: 100%; height: 44px; padding: 0 var(--space-12);
+            border-radius: var(--radius-sm); border: 1px solid var(--border-rest);
+            background: var(--surface-low); color: var(--text);
+            font-family: var(--font-prose); font-size: 15px; }
+
+/* The composer grew two things: somewhere to put a photo, and a say in who
+   answers. Both sit on the writing bar because both are decisions made at the
+   moment of asking, not settings to go and find. */
+.composer form { flex-direction: column; align-items: stretch; gap: var(--space-8); }
+.composer-row { display: flex; gap: var(--space-8); align-items: flex-end; }
+.attach { flex: none; display: inline-flex; align-items: center; justify-content: center;
+          width: 44px; height: 44px; border-radius: var(--radius-sm);
+          border: 1px solid var(--border-rest); background: var(--surface-low);
+          color: var(--text-muted); cursor: pointer; }
+.attach:hover { background: var(--surface-container); color: var(--text); }
+.attach input { position: absolute; opacity: 0; pointer-events: none; width: 0; height: 0; }
+.composer-foot { display: flex; align-items: center; gap: var(--space-8); min-width: 0; }
+.modelwrap { position: relative; display: inline-flex; flex: none; }
+.modelpick { appearance: none; -webkit-appearance: none;
+             height: 26px; padding: 0 var(--space-20) 0 var(--space-8);
+             border-radius: var(--radius-pill); border: 1px solid var(--border-rest);
+             background: var(--surface-low); color: var(--text-dim);
+             font-family: var(--font-mono); font-size: 11px; letter-spacing: .04em; }
+.modelwrap::after { content: ""; position: absolute; right: var(--space-8); top: 11px;
+                    pointer-events: none; border-left: 3px solid transparent;
+                    border-right: 3px solid transparent;
+                    border-top: 3.5px solid var(--text-muted); }
+.modelnote { font-size: 11px; overflow: hidden; text-overflow: ellipsis;
+             white-space: nowrap; min-width: 0; }
+
+/* What he brought. An image is shown, because the point of sending a photo of a
+   board is to look at it together; anything else is a line he can tap. */
+.broughtlist { display: flex; flex-wrap: wrap; gap: var(--space-8);
+               margin-top: var(--space-8); }
+.brought { display: inline-flex; align-items: center; gap: var(--space-6);
+           padding: var(--space-6) var(--space-12); border-radius: var(--radius-md);
+           border: 1px solid var(--border-rest); background: var(--surface-low);
+           color: var(--text-dim); font-size: 13px; max-width: 100%; }
+.brought:hover { background: var(--surface-container); text-decoration: none; }
+.brought span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* A floor as well as a ceiling. A screenshot of one error line can be 40px
+   tall, and rendered at its own size it reads as a smudge rather than as
+   something he attached. */
+.brought.shot { padding: 0; overflow: hidden; border-radius: var(--radius-md);
+                display: grid; place-items: center; background: var(--surface-low);
+                min-width: 88px; min-height: 88px; }
+.brought.shot img { display: block; max-width: 220px; max-height: 220px; }
+
+.waiting { display: flex; flex-wrap: wrap; gap: var(--space-6);
+           max-width: var(--reading); margin: 0 auto var(--space-8); }
+.waiting-one { height: 28px; padding-right: var(--space-6); font-size: 12px;
+               max-width: 100%; }
+.waiting-one .n { overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+                  max-width: 22ch; }
+.waiting-one .x { border: 0; background: none; color: var(--text-muted);
+                  font-size: 16px; line-height: 1; cursor: pointer;
+                  padding: 0 var(--space-4); }
+.waiting-one .x:hover { color: var(--text); }
+.attach.busy { opacity: .5; pointer-events: none; }

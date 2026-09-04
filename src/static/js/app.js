@@ -677,6 +677,166 @@ $("#retry")?.addEventListener("click", async (e) => {
   });
 }
 
+/* ------------------------------------------------------------------ the bench */
+{
+  /* Crossing something off asks why, once, in a sheet. Two states only work if
+     the reason survives, and a checkbox cannot carry one. Putting an entry back
+     never asks: reopening is not a decision anybody needs explained. */
+  const sheet = $("#whysheet");
+  const field = $("#whyfield");
+  let pending = null;
+
+  const openWhy = (on) => { if (sheet) sheet.hidden = !on; };
+
+  const send = async (id, done, note) => {
+    try {
+      await post(`/backlog/${id}/state`, { done, note: note || null });
+      location.reload();
+    } catch (e) {
+      location.reload();          // whatever happened, the list is the truth
+    }
+  };
+
+  $$("[data-cross]").forEach((box) => {
+    box.addEventListener("change", () => {
+      const id = Number(box.dataset.cross);
+      if (!box.checked) return send(id, false, null);
+      pending = id;
+      if (field) field.value = "";
+      openWhy(true);
+      field?.focus();
+    });
+  });
+
+  $("#whysave")?.addEventListener("click", () => {
+    openWhy(false); send(pending, true, field?.value.trim());
+  });
+  $("#whyskip")?.addEventListener("click", () => {
+    openWhy(false); send(pending, true, null);
+  });
+  field?.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); $("#whysave")?.click(); }
+  });
+  sheet?.addEventListener("click", (e) => {
+    if (e.target === sheet) { openWhy(false); location.reload(); }
+  });
+
+  /* A note saves itself. He is writing at a bench, on a phone, and a Save
+     button he has to remember is a note he loses. */
+  const body = $("#notebody");
+  const state = $("#notestate");
+  if (body) {
+    const grow = () => { body.style.height = "auto";
+                         body.style.height = Math.max(body.scrollHeight, 400) + "px"; };
+    grow();
+    let timer = null, last = body.value;
+    const save = async () => {
+      if (body.value === last) return;
+      last = body.value;
+      if (state) state.textContent = "Saving";
+      try {
+        const res = await post(`/notes/${body.dataset.note}`, { body: body.value });
+        if (state) state.textContent = "Saved";
+      } catch (e) {
+        if (state) state.textContent = "Not saved. Your words are still here.";
+      }
+    };
+    body.addEventListener("input", () => {
+      grow();
+      clearTimeout(timer);
+      timer = setTimeout(save, 900);
+    });
+    // Leaving the page is the last chance to keep what he typed.
+    body.addEventListener("blur", save);
+    addEventListener("pagehide", () => {
+      if (body.value !== last) navigator.sendBeacon?.(
+        `/notes/${body.dataset.note}`,
+        new Blob([JSON.stringify({ body: body.value })], { type: "application/json" }));
+    });
+  }
+}
+
+/* ------------------------------------------------------- what he brings along */
+{
+  /* Attach then type, not the reverse. The file is uploaded the moment it is
+     picked and held against the thread, so it survives him changing his mind
+     about the wording, and the next message carries it. */
+  const input = $("#attach");
+  const holder = $("#waiting");
+  const box = input?.closest(".attach");
+
+  const chip = (file) => {
+    const el = document.createElement("span");
+    el.className = "chip waiting-one";
+    el.dataset.attachment = file.id;
+    const name = document.createElement("span");
+    name.className = "n";
+    name.textContent = file.filename;
+    const x = document.createElement("button");
+    x.type = "button"; x.className = "x"; x.textContent = "\u00d7";
+    x.setAttribute("aria-label", `Remove ${file.filename}`);
+    el.append(name, x);
+    return el;
+  };
+
+  input?.addEventListener("change", async () => {
+    if (!input.files?.length) return;
+    const data = new FormData();
+    for (const file of input.files) data.append("files", file);
+    box?.classList.add("busy");
+    try {
+      const res = await send(`${location.pathname}/attach`, { method: "POST", body: data });
+      const out = await res.json();
+      (out.attached || []).forEach((f) => holder?.append(chip(f)));
+      if (holder && holder.children.length) holder.hidden = false;
+      // A refusal explains itself, once, where he can see it.
+      (out.refused || []).forEach((r) => {
+        const el = document.createElement("span");
+        el.className = "chip waiting-one";
+        el.textContent = r.why;
+        holder?.append(el);
+        holder.hidden = false;
+        setTimeout(() => el.remove(), 6000);
+      });
+    } catch (e) {
+      /* the sheet handled it, or it genuinely failed */
+    } finally {
+      box?.classList.remove("busy");
+      input.value = "";
+    }
+  });
+
+  holder?.addEventListener("click", async (e) => {
+    const x = e.target.closest(".x");
+    if (!x) return;
+    const el = x.closest("[data-attachment]");
+    try { await post(`/chat/attachments/${el.dataset.attachment}/remove`); } catch (err) {}
+    el.remove();
+    if (holder && !holder.children.length) holder.hidden = true;
+  });
+}
+
+/* ------------------------------------------------- which model, and where it goes */
+{
+  /* The note is not decoration. It is the only place the interface says out
+     loud whether what he is about to type leaves the building, and that is the
+     entire reason for offering a local option at all. */
+  const pick = $("#modelpick");
+  const note = $("#modelnote");
+  const wrap = pick?.closest(".modelwrap");
+  pick?.addEventListener("change", async () => {
+    const chosen = pick.value;
+    const option = pick.selectedOptions[0];
+    if (note) note.textContent = option?.dataset.note || "";
+    if (wrap) wrap.dataset.model = chosen;
+    try {
+      await post(`/chat/${pick.dataset.thread}/model`, { model: chosen });
+    } catch (e) {
+      if (note) note.textContent = "Could not change the model.";
+    }
+  });
+}
+
 /* ------------------------------------------------------- documents he asks for */
 {
   /* The files sheet. Opening it must not move the writing bar, which is why the

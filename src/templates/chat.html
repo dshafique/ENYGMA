@@ -50,6 +50,21 @@
         <div class="turn {{ m.role }}" data-message="{{ m.id }}">
           <div class="who"><span class="label">{{ 'You' if m.role == 'operator' else 'ENYGMA' }}</span></div>
           <div class="bubble">{{ m.body }}</div>
+          {% if m.files %}
+          <div class="broughtlist">
+            {% for f in m.files %}
+            {% if f.kind == 'image' %}
+            <a class="brought shot" href="/attachments/{{ f.id }}" target="_blank">
+              <img src="/attachments/{{ f.id }}" alt="{{ f.filename }}" loading="lazy">
+            </a>
+            {% else %}
+            <a class="brought" href="/attachments/{{ f.id }}" download="{{ f.filename }}">
+              {{ i.icon('download') }}<span>{{ f.filename }}</span>
+            </a>
+            {% endif %}
+            {% endfor %}
+          </div>
+          {% endif %}
           {% if m.role == 'enygma' %}
           <div class="saveas">
             <label class="label" for="saveas-{{ m.id }}">Save as</label>
@@ -70,10 +85,39 @@
         {% endfor %}
       </div>
       <div class="composer">
+        <div class="waiting" id="waiting" {% if not waiting %}hidden{% endif %}>
+          {% for f in waiting %}
+          <span class="chip waiting-one" data-attachment="{{ f.id }}">
+            <span class="n">{{ f.filename }}</span>
+            <button type="button" class="x" aria-label="Remove {{ f.filename }}">×</button>
+          </span>
+          {% endfor %}
+        </div>
         <form method="post" action="/chat/{{ current.thread.id }}/say" id="say">
-          <textarea name="body" id="body" rows="1" placeholder="Ask ENYGMA"
-                    enterkeyhint="enter" required></textarea>
-          <button class="btn" type="submit" aria-label="Send">{{ i.icon('send') }}</button>
+          <div class="composer-row">
+            <label class="attach" title="Attach a file or a photo">
+              <input type="file" id="attach" multiple
+                     accept="image/*,.pdf,.txt,.md,.csv,.json,.log">
+              {{ i.icon('plus') }}
+            </label>
+            <textarea name="body" id="body" rows="1" placeholder="Ask ENYGMA"
+                      enterkeyhint="enter" required></textarea>
+            <button class="btn" type="submit" aria-label="Send">{{ i.icon('send') }}</button>
+          </div>
+          <div class="composer-foot">
+            <span class="modelwrap" data-model="{{ current.model }}">
+              <select class="modelpick" id="modelpick"
+                      data-thread="{{ current.thread.id }}"
+                      aria-label="Which model answers in this thread">
+                {% for m in offered %}
+                <option value="{{ m.key }}" data-note="{{ m.note }}"
+                        {{ 'selected' if m.key == current.model }}
+                        {{ 'disabled' if not m.ready }}>{{ m.label }}{% if not m.ready %} — {{ m.why }}{% endif %}</option>
+                {% endfor %}
+              </select>
+            </span>
+            <span class="modelnote dim" id="modelnote">{{ current.note }}</span>
+          </div>
         </form>
         {% if not current.messages %}
         <p class="composer-hint">Return starts a new line. Send with the button.</p>
