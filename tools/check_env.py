@@ -22,14 +22,21 @@ IDENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 # Names whose values must never be printed, even partially, beyond a tail.
 SECRET = ("SECRET", "KEY", "TOKEN", "PASSWORD", "PIN")
 
-KNOWN = {
-    "ENYGMA_PORT", "ENYGMA_HOST", "ENYGMA_RP_ID", "ENYGMA_RP_NAME", "ENYGMA_ORIGIN",
-    "ENYGMA_SESSION_SECRET", "ENYGMA_INSECURE_COOKIES", "ENYGMA_REAUTH_MINUTES",
-    "ENYGMA_PIPELINE", "ENYGMA_GEMINI_API_KEY", "ENYGMA_GEMINI_MODEL",
-    "ENYGMA_MAX_UPLOAD_MB", "ENYGMA_WORKER_POLL_SECONDS",
-    "ENYGMA_HINOTES_ENABLED", "ENYGMA_HINOTES_BASE", "ENYGMA_HINOTES_TOKEN",
-    "ENYGMA_HINOTES_PAGE_SIZE", "ENYGMA_HINOTES_TIMEOUT",
-}
+# Read out of src/config.py rather than written down here.
+#
+# This was a hand-kept list and it went stale the first time a setting was
+# added: a real, working ENYGMA_ANTHROPIC_API_KEY was reported as "not a
+# setting ENYGMA reads", in the middle of the output an operator is told to
+# trust. A checker that is confidently wrong about a key is worse than no
+# checker, because the next true warning it prints gets ignored too.
+def known_settings() -> set[str]:
+    source = ROOT / "src" / "config.py"
+    if not source.exists():
+        return set()
+    return set(re.findall(r'"(ENYGMA_[A-Z0-9_]+)"', source.read_text()))
+
+
+KNOWN = known_settings()
 
 
 def mask(name: str, value: str) -> str:

@@ -210,3 +210,40 @@ def test_the_changelog_never_claims_a_build_that_does_not_exist_yet():
     assert number(changelog.latest()) <= number(stamped.read_text().strip()), (
         f"changelog says {changelog.latest()}, the build is "
         f"{stamped.read_text().strip()}")
+
+
+# ------------------------------------------- the installer's own report
+
+def test_the_env_checker_knows_every_setting_the_app_reads():
+    """It was a hand-kept list and went stale the first time a setting was
+    added: a real, working ENYGMA_ANTHROPIC_API_KEY was reported on the Spark as
+    "not a setting ENYGMA reads", in the middle of the output an operator is
+    told to trust. A checker confidently wrong about a key is worse than none,
+    because the next true warning it prints gets ignored too.
+    """
+    import re, importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "check_env", ROOT / "tools/check_env.py")
+    checker = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(checker)
+
+    reads = set(re.findall(r'"(ENYGMA_[A-Z0-9_]+)"',
+                           (ROOT / "src/config.py").read_text()))
+    assert reads, "no settings found in config.py; this test is looking in the wrong place"
+    missing = reads - checker.KNOWN
+    assert not missing, f"the checker would call these unknown: {sorted(missing)}"
+
+    # And specifically the ones that were missing when this was found.
+    for name in ("ENYGMA_ANTHROPIC_API_KEY", "ENYGMA_OLLAMA_MODEL",
+                 "ENYGMA_CHAT_DEFAULT", "ENYGMA_SPEND_STEP_DOLLARS"):
+        assert name in checker.KNOWN, name
+
+
+def test_the_list_is_derived_rather_than_written_down():
+    """A list a person maintains is a list that goes stale. This one is read out
+    of config.py, so adding a setting adds it here."""
+    source = (ROOT / "tools/check_env.py").read_text()
+    assert "def known_settings()" in source
+    assert "KNOWN = known_settings()" in source
+    # No hand-written set left behind to drift alongside it.
+    assert '"ENYGMA_PORT", "ENYGMA_HOST"' not in source
