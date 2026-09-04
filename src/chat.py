@@ -8,7 +8,7 @@ When no model is reachable the reply says so rather than inventing an answer. A
 glossary hit is still returned, because that is real knowledge the app has.
 """
 from .db import cursor
-from . import glossary, library, documents, voice
+from . import glossary, library, documents, voice, models
 from .config import config
 
 NO_MODEL = (
@@ -84,7 +84,8 @@ def say(thread_id: int, body: str) -> dict:
         _append(thread_id, "enygma", reply, transient=made is None)
         return {"reply": reply, "made": made}
 
-    reply = _answer(body, caveat=_first_reply(thread_id), history=history)
+    reply = _answer(body, caveat=_first_reply(thread_id), history=history,
+                    model=model_of(thread_id))
     # "I could not reach the model just now" is a fact about one second, not a
     # standing property of the app, and must not become part of what it knows.
     _append(thread_id, "enygma", reply,
@@ -171,11 +172,35 @@ def _transcript(history: list[dict]) -> str:
     return "\n\n".join(lines)
 
 
+def model_of(thread_id: int) -> str:
+    """Which model this thread is on. NULL means whatever the default is now,
+    so changing the default moves every thread he never had an opinion about
+    and leaves alone every one he did."""
+    with cursor() as conn:
+        row = conn.execute("SELECT model FROM chat_threads WHERE id = ?",
+                           (thread_id,)).fetchone()
+    return models.resolve(row["model"] if row else None)
+
+
+def set_model(thread_id: int, name: str) -> str:
+    chosen = models.resolve(name)
+    with cursor() as conn:
+        conn.execute("UPDATE chat_threads SET model = ? WHERE id = ?",
+                     (chosen, thread_id))
+    return chosen
+
+
 def _answer(question: str, caveat: bool = True,
-            history: list[dict] | None = None) -> str:
+            history: list[dict] | None = None,
+            model: str | None = None) -> str:
     hit = glossary.lookup(_probable_term(question))
     found = library.context_for(question)
 
+    choice = models.resolve(model)
+    # ENYGMA_PIPELINE=stub means the whole application runs with no key and no
+    # network -- that is what it is for and how the interface got built before
+    # the bill started. So it overrides the picker rather than sitting beside
+    # it: in stub mode no choice reaches a model, including the local one.
     if config.PIPELINE != "gemini":
         # No model: say what is actually known, and from where.
         parts = []
@@ -188,8 +213,7 @@ def _answer(question: str, caveat: bool = True,
         return "\n\n".join(parts) if parts else (
             NO_MODEL if caveat else "That is not in my glossary or your library.")
     try:
-        from .pipeline.gemini import GeminiBackend
-        backend = GeminiBackend()
+        backend = models.backend_for(choice)
         prompt = (
             "You are ENYGMA, answering an engineering intern in an ongoing "
             "conversation. Be direct and concrete. Three short paragraphs at "
@@ -246,8 +270,12 @@ def _answer(question: str, caveat: bool = True,
             answer += f"\n\nDrawn from your library: {names}"
         return answer
     except Exception as exc:
-        base = f"{hit['term']} — {hit['gloss']}\n\n" if hit else ""
-        return base + f"I could not reach the model just now: {exc}"
+        base = f"{hit['term']}: {hit['gloss']}\n\n" if hit else ""
+        # Named, because which model failed is the first thing he needs and the
+        # fix differs: ollama is a service on his own machine, the other two are
+        # somebody else's outage or a key.
+        return base + (f"I could not reach {models.LABELS.get(choice, choice)} "
+                       f"just now: {exc}")
 
 
 def _probable_term(question: str) -> str:

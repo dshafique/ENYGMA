@@ -107,6 +107,26 @@ class Config:
     # Monday morning describing a week he has stopped thinking about.
     WEEKNOTE_HOUR = int(os.environ.get("ENYGMA_WEEKNOTE_HOUR", "15"))
 
+    # The local model, on the same machine. Chat, images and documents default
+    # here: it is free, it is fast enough, and nothing he types leaves the
+    # building. Transcription is not on this list, because ollama has no audio
+    # model and a text model asked to transcribe will invent a plausible
+    # meeting, which is worse than no meeting.
+    OLLAMA_HOST = os.environ.get("ENYGMA_OLLAMA_HOST", "http://127.0.0.1:11434")
+    OLLAMA_MODEL = os.environ.get("ENYGMA_OLLAMA_MODEL", "qwen3.6:35b")
+    # These models carry very long contexts, but the whole context is memory the
+    # host has to find. 32k is more than a chat thread with a library extract in
+    # it ever needs.
+    OLLAMA_CONTEXT = int(os.environ.get("ENYGMA_OLLAMA_CONTEXT", "32768"))
+    # A 35B model on a cold start can take a while to answer the first question
+    # after a reboot. Better a long wait than a failure he has to retype into.
+    OLLAMA_TIMEOUT = float(os.environ.get("ENYGMA_OLLAMA_TIMEOUT", "180"))
+
+    # Which model a new chat thread starts on.
+    CHAT_DEFAULT = os.environ.get("ENYGMA_CHAT_DEFAULT", "local")
+    ANTHROPIC_API_KEY = os.environ.get("ENYGMA_ANTHROPIC_API_KEY", "").strip()
+    ANTHROPIC_MODEL = os.environ.get("ENYGMA_ANTHROPIC_MODEL", "claude-opus-4-5")
+
     # HiNotes. The base URL is not in the handoff; lift it from PHNTM's
     # src/hinotes/ module rather than guessing, and confirm before first pull.
     HINOTES_BASE = os.environ.get("ENYGMA_HINOTES_BASE", "").rstrip("/")
@@ -120,6 +140,17 @@ class Config:
     @staticmethod
     def gemini_key() -> str:
         return _require("ENYGMA_GEMINI_API_KEY")
+
+    @staticmethod
+    def has(name: str) -> bool:
+        """Whether a secret is set, without demanding it.
+
+        The key methods raise, which is right at the point of use: a missing key
+        should stop the call loudly rather than half-work. But the model picker
+        has to ask "could this answer?" about all three before he has chosen
+        any, and a question is not a use.
+        """
+        return bool(os.environ.get(name, "").strip())
 
     @staticmethod
     def session_secret() -> str:
