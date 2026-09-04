@@ -100,3 +100,37 @@ def test_nothing_references_a_template_that_no_longer_exists():
     assert not missing, f"main.py renders templates that do not exist: {missing}"
     assert not (root / "src/templates/meeting.html").exists(), \
         "meeting.html was folded into meetings.html; a stale copy will shadow it"
+
+
+# --------------------------------------------- the week in his own words
+
+def test_the_words_box_needs_a_session():
+    r = client().post("/week/2026-08-31/words", json={"text": "did a thing"})
+    assert r.status_code in (302, 401, 403)
+
+
+def test_an_empty_box_is_refused_with_a_sentence():
+    r = client(True).post("/week/2026-08-31/words", json={"text": "   "})
+    assert r.status_code == 400
+    assert "Write something" in r.json()["detail"]
+
+
+def test_a_whole_essay_is_refused_rather_than_sent_to_a_model():
+    """Six thousand characters is not a week. Catching it here keeps a pasted
+    document out of a model call he pays for."""
+    r = client(True).post("/week/2026-08-31/words", json={"text": "x" * 6001})
+    assert r.status_code == 400
+    assert "longer than a week" in r.json()["detail"]
+
+
+def test_a_date_that_is_not_a_date_is_refused():
+    r = client(True).post("/week/not-a-monday/words", json={"text": "did a thing"})
+    assert r.status_code == 400
+
+
+def test_the_home_page_carries_the_box():
+    """The card is on Home whether or not a note has ever been written, because
+    the box he types his own week into lives on it."""
+    body = client(True).get("/").text
+    assert 'id="wn-words-box"' in body
+    assert "Write it in your own words" in body

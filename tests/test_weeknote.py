@@ -210,3 +210,141 @@ def test_the_provenance_line_reads_like_a_sentence():
     ) == "4 meetings, 6 actions you closed and 2 sets of notes"
     assert weeknote.drawn_from({"meetings": [1], "closed": [], "notes": [],
                                 "documents": [], "rejected": [], "owed": []}) == "1 meeting"
+
+
+# ------------------------------------------------ the week in his own words
+#
+# Most of his week happens at a bench with a soldering iron, where nothing is
+# recorded. So there is a second way in: he types it roughly and this lays it
+# out. The rule that makes that safe is narrow -- the model may arrange his
+# words, never add to them -- and the tests below are all about what happens
+# when a model ignores that.
+
+class Raising:
+    """ollama stopped, no key, a timeout. All the same to this feature."""
+    model = "fake"
+
+    def _ask(self, parts, schema=None):
+        raise RuntimeError("nothing is answering")
+
+
+def test_his_own_lines_are_the_bullets():
+    from src import weeknote
+    out = weeknote.by_hand("fixed the export it was slow\n"
+                           "sat in on the LEAF meeting\n"
+                           "still stuck on the humidity drift")
+    assert out["done"] == ["fixed the export it was slow", "sat in on the LEAF meeting"]
+    assert out["next"] == ["still stuck on the humidity drift"]
+
+
+def test_one_clause_with_a_comma_is_not_cut_in_half():
+    """'fixed the drift, took most of Tuesday' is one thing he did, not two."""
+    from src import weeknote
+    assert weeknote.by_hand("fixed the drift, took most of Tuesday")["done"] == \
+        ["fixed the drift, took most of Tuesday"]
+
+
+def test_a_model_that_will_not_behave_hands_back_his_own_words():
+    """The other paths in this file drop a bad bullet. This one cannot: the
+    material is his, so dropping it loses work he actually did. It falls back to
+    his sentences instead, which are worse prose and true."""
+    from src import weeknote
+    bad = json.dumps({"done": ["Leveraged the tent rig to streamline throughput"],
+                      "next": []})
+    out = weeknote.from_words("re-flowed the ESP32 board, the I2C bus is stable now",
+                              backend=Backend(bad, bad))
+    assert out["done"] == ["re-flowed the ESP32 board, the I2C bus is stable now"]
+    assert out["model"] is None
+    assert "leveraged" not in json.dumps(out).lower()
+
+
+def test_a_backend_that_is_down_still_produces_a_note():
+    """He is standing in a lab on a Friday. 'ollama is not running' is not an
+    answer to 'write down what I did'."""
+    from src import weeknote
+    out = weeknote.from_words("swapped the EZO board\nreran the calibration",
+                              backend=Raising())
+    assert out["done"] == ["swapped the EZO board", "reran the calibration"]
+
+
+def test_a_well_behaved_model_gets_to_do_the_arranging():
+    from src import weeknote
+    backend = Backend(json.dumps({"done": ["Re-flowed the ESP32 board. The I2C "
+                                           "bus is stable now."],
+                                  "next": ["Recalibrate the EZO probes."]}))
+    out = weeknote.from_words("reflowed the esp32, i2c stable. next: recal the ezo",
+                              backend=backend)
+    assert out["done"] == ["Re-flowed the ESP32 board. The I2C bus is stable now."]
+    assert out["next"] == ["Recalibrate the EZO probes."]
+    assert "recal the ezo" in backend.asked[0], "his text was not passed through"
+    assert "Do not add work he did not mention" in backend.asked[0]
+
+
+def test_an_empty_box_writes_nothing():
+    from src import weeknote
+    assert weeknote.from_words("   ")["done"] == []
+
+
+def test_what_he_wrote_replaces_what_the_app_guessed():
+    """The whole point. If it merged, his three real lines would arrive under
+    five inferred ones and he would be back to editing a list on a phone."""
+    from src import weeknote
+    monday = date(2026, 8, 31)
+    _seed_a_week(monday)
+    weeknote.write(monday)
+    assert weeknote.stored(monday)["done"], "nothing was generated to replace"
+
+    note = weeknote.save_words(monday.isoformat(),
+                               "soldered the new sensor harness\nran it overnight",
+                               backend=Raising())
+    assert note["done"] == ["soldered the new sensor harness", "ran it overnight"]
+    assert note["edited"] is True
+
+
+def test_a_section_he_said_nothing_about_keeps_what_was_there():
+    """Writing three lines about the tent rig should not silently empty next
+    week."""
+    from src import weeknote
+    monday = date(2026, 8, 31)
+    with db.cursor() as conn:
+        conn.execute("INSERT INTO action_items (recording_id, text) "
+                     "SELECT id, 'Recalibrate the EZO probes' FROM recordings LIMIT 1")
+    weeknote.write(monday, keep_edit=False)
+    before = weeknote.stored(monday)["next"]
+    assert before, "the fixture stopped producing a next list"
+
+    note = weeknote.save_words(monday.isoformat(), "cut the harness to length",
+                               backend=Raising())
+    assert note["done"] == ["cut the harness to length"]
+    assert note["next"] == before
+
+
+def test_his_words_go_in_the_edit_slot_so_the_built_one_comes_back():
+    """'Write it again' has to still mean something after he has typed his own,
+    or the only way back is to have kept a copy."""
+    from src import weeknote
+    monday = date(2026, 8, 31)
+    weeknote.write(monday, keep_edit=False)
+    built = weeknote.stored(monday)["done"]
+    weeknote.save_words(monday.isoformat(), "did my own thing", backend=Raising())
+    assert weeknote.stored(monday)["done"] == ["did my own thing"]
+
+    weeknote.write(monday, keep_edit=False)
+    assert weeknote.stored(monday)["done"] == built
+
+
+def test_a_week_with_no_note_still_has_somewhere_to_write():
+    """A quiet week is the week he most needs to write himself, and it is the
+    one week that never gets a row of its own."""
+    from src import weeknote
+    monday = date(2019, 6, 3)
+    assert weeknote.stored(monday) is None
+    note = weeknote.save_words(monday.isoformat(), "spent the week on the rig",
+                               backend=Raising())
+    assert note["done"] == ["spent the week on the rig"]
+
+
+def test_home_always_has_a_card_to_put_the_box_on():
+    from src import weeknote, home
+    note = home.week_note()
+    assert note is not None and "week_start" in note and "range" in note

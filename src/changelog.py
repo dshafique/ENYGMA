@@ -29,6 +29,18 @@ UNRELEASED = "UNRELEASED"
 
 RELEASES = [
     {
+        "mark": "Mk II.37",
+        "date": "2026-09-04",
+        "headline": "Write your own week",
+        "items": [
+            "Your week card has a box you can type into. Write roughly what you "
+            "did, one line each, and it lays it out as the note.",
+            "It uses your words and does not add any of its own.",
+            "Write it again still brings back the one ENYGMA built for you.",
+            "Chat lost a strip of empty space above the writing bar.",
+        ],
+    },
+    {
         "mark": "Mk II.34",
         "date": "2026-09-04",
         "headline": "Rotation, the keyboard, and what it costs",

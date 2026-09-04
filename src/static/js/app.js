@@ -1043,6 +1043,46 @@ $("#retry")?.addEventListener("click", async (e) => {
     } catch (e) { say("Could not save that."); }
   });
 
+  /* His own words. The one control here that writes over what is shown, so it
+     says what it is doing before and after, and the built note is never lost:
+     this saves into the edit slot, exactly where the Edit button saves. */
+  const wordsOpen = $("#wn-words-open");
+  const wordsBox = $("#wn-words-box");
+  const wordsText = $("#wn-text");
+  const wordsGo = $("#wn-words-go");
+  const wordsMsg = $("#wn-words-msg");
+  const wordsSay = (t) => { if (wordsMsg) { wordsMsg.textContent = t || "";
+                            if (t) setTimeout(() => (wordsMsg.textContent = ""), 4000); } };
+
+  wordsOpen?.addEventListener("click", () => {
+    const shut = wordsBox.hidden;
+    wordsBox.hidden = !shut;
+    wordsOpen.setAttribute("aria-expanded", String(shut));
+    if (shut) wordsText?.focus();
+  });
+  $("#wn-words-cancel")?.addEventListener("click", () => {
+    wordsBox.hidden = true;
+    wordsOpen?.setAttribute("aria-expanded", "false");
+  });
+
+  wordsGo?.addEventListener("click", async () => {
+    const text = (wordsText?.value || "").trim();
+    if (!text) { wordsSay("Write something first."); wordsText?.focus(); return; }
+    wordsGo.disabled = true;
+    wordsText.disabled = true;
+    const was = wordsGo.textContent;
+    wordsGo.textContent = "Laying it out\u2026";
+    try {
+      await post(`/week/${week}/words`, { text });
+      location.reload();
+    } catch (e) {
+      wordsSay(e.data?.detail || "Could not lay that out just now.");
+      wordsGo.disabled = false;
+      wordsText.disabled = false;
+      wordsGo.textContent = was;
+    }
+  });
+
   const again = $("#wn-again");
   again?.addEventListener("click", async () => {
     // Said plainly, because it is the one button here that destroys something.

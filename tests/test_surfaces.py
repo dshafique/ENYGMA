@@ -759,3 +759,37 @@ def test_every_page_that_shows_an_action_offers_the_same_four_states():
         assert 'class="statepick"' in text or "No recordings" in text or "Nothing" in text
     from src import actions as repo
     assert repo.STATES == ("open", "pending", "done", "rejected")
+
+
+def test_a_panel_that_starts_hidden_actually_stays_hidden():
+    """A scar. `.wn-words-box { display: flex }` is a class rule in the author
+    stylesheet, and the `hidden` attribute is a `display: none` in the browser's
+    own, so the flex won and the box opened itself the moment it was styled. It
+    rendered correctly in every test that only asked whether the markup was
+    there, which is how it got as far as a screenshot.
+
+    Generalised: any class that sets a display and is worn by an element written
+    with `hidden` must also say what hidden looks like.
+    """
+    import re
+    root = pathlib.Path(__file__).resolve().parent.parent
+    css = (root / "src/static/css/app.css").read_text()
+
+    displayed = {m.group(1) for m in
+                 re.finditer(r"\.([a-z0-9-]+)\s*(?:,[^{]*)?\{[^}]*display:\s*(?!none)",
+                             css)}
+    guarded = set(re.findall(r"\.([a-z0-9-]+)\[hidden\]", css))
+
+    starts_hidden = set()
+    for page in (root / "src/templates").glob("*.html"):
+        # `aria-hidden="true"` is a different attribute and always present.
+        for tag in re.findall(r"<[a-z]+[^>]*(?<![-\w])hidden(?=[\s/>])[^>]*>",
+                              page.read_text()):
+            found = re.search(r'class="([^"]*)"', tag)
+            if found:
+                starts_hidden.update(found.group(1).split())
+
+    unguarded = sorted((starts_hidden & displayed) - guarded)
+    assert not unguarded, (
+        "these classes set a display and are worn by an element that starts "
+        f"hidden, so hidden does nothing: {unguarded}")

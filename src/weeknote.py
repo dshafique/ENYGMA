@@ -32,7 +32,12 @@ from .config import config
 
 # What the model is told. Deliberately short: a long prompt full of prohibitions
 # produces careful, stilted prose, which is the thing being avoided.
-VOICE = """You are writing a short weekly update for an engineering intern to
+NEVER = """Never use: leverage, utilise, delve, streamline, robust, seamless, spearhead,
+facilitate, synergy, deep dive, circle back, align, holistic, impactful,
+key learnings, excited to share, pleased to report, I had the opportunity to.
+Never use an em dash or a semicolon."""
+
+VOICE = f"""You are writing a short weekly update for an engineering intern to
 send to his manager. Write it as him, in the first person.
 
 How to write:
@@ -42,10 +47,7 @@ How to write:
   * No selling. "Fixed the login bug" is finished; it does not need "successfully".
   * Explain the thing itself, the way you would to a friend who is not on the team.
 
-Never use: leverage, utilise, delve, streamline, robust, seamless, spearhead,
-facilitate, synergy, deep dive, circle back, align, holistic, impactful,
-key learnings, excited to share, pleased to report, I had the opportunity to.
-Never use an em dash or a semicolon.
+{NEVER}
 
 Between three and five bullets per section. Each one a fact he could be asked
 about. If there is not enough real material for three, write fewer."""
@@ -250,7 +252,129 @@ def _stub(found: dict) -> dict:
             "next": clean([a["text"] for a in found["owed"]][:5])}
 
 
+# --------------------------------------------------------------- his words
+
+# The other way in. Everything above builds the note out of what ENYGMA saw --
+# meetings, closed actions, documents. But most of his week happens on a bench
+# with a soldering iron, where nothing is recorded, and the app cannot see any of
+# it. Rather than make him fight a bulleted list in a contenteditable box on a
+# phone, he types the week the way he would say it out loud and this turns it
+# into the note.
+#
+# The rule that makes it trustworthy is narrow: the model may ARRANGE his words.
+# It may not add. A model that invents a bullet here is inventing something he is
+# about to send his manager under his own name, so if it will not behave, the
+# fallback is not a better model, it is his own sentences split up by hand.
+
+WORDS = f"""He has typed a rough note about his week in his own words. Turn it
+into two short lists he can paste into an email to his manager.
+
+Use only what he wrote. Do not add work he did not mention. Do not invent
+numbers, names or dates. If he was vague, stay vague.
+
+Keep his facts, his part names and his numbers exactly as he gave them. Fix the
+grammar, finish the sentences, split one long run-on into separate bullets.
+Nothing else.
+
+Plain words. One idea per bullet. Short sentences. Write it as him, in the first
+person.
+
+Anything he finished goes in "done". Anything he is still on, or says he is
+picking up next, goes in "next". If he said nothing about what is next, return
+an empty list for "next" rather than making one up.
+
+At most five bullets in each list. Fewer is fine.
+
+{NEVER}"""
+
+
+# Sentence enders, and then commas, but only for a wall of text with no line
+# breaks in it. He usually writes one thing per line, and splitting those further
+# would cut "fixed the drift, took most of Tuesday" into two half-bullets.
+_ENDER = re.compile(r"(?<=[.!?])\s+")
+_COMMA = re.compile(r",\s+(?=(?:and\s+)?(?:i|then|also|after)\b)", re.I)
+
+# What reads as unfinished. Used only when there is no model to ask, so it is a
+# guess, and a wrong guess costs him one drag of a bullet from one list to the
+# other rather than a wrong fact.
+_AHEAD = re.compile(
+    r"\b(next week|next up|tomorrow|monday|going to|gonna|plan(?:ning)? to|"
+    r"hoping to|want to|need to|have to|still (?:need|stuck|on|working|got)|"
+    r"i'?ll\b|will\b|start(?:ing)? on|carry(?:ing)? on|pick(?:ing)? up|"
+    r"waiting (?:on|for)|to ?do)\b", re.I)
+
+
+def _pieces(text: str) -> list[str]:
+    """His text, cut where he already cut it."""
+    lines = [line.strip(" \t") for line in (text or "").splitlines()]
+    lines = [line for line in lines if line.strip()]
+    if len(lines) > 1:
+        return lines
+    one = lines[0] if lines else ""
+    if not one:
+        return []
+    parts = [p for p in _ENDER.split(one) if p.strip()]
+    if len(parts) == 1 and len(one) > 90:
+        parts = [p for p in _COMMA.split(one) if p.strip()]
+    return parts
+
+
+def by_hand(text: str) -> dict:
+    """No model, or a model that would not behave. His own sentences, tidied.
+
+    Worse prose than the model would write and better than the alternative: what
+    lands in the note is a thing he actually typed, so the failure mode is a
+    clumsy bullet rather than a confident lie.
+    """
+    done, ahead = [], []
+    for piece in _pieces(text):
+        (ahead if _AHEAD.search(piece) else done).append(piece)
+    return {"done": clean(done), "next": clean(ahead)}
+
+
+def from_words(text: str, backend=None) -> dict:
+    """What he typed, as the two lists. Arranged, never added to."""
+    text = (text or "").strip()
+    if not text:
+        return {"done": [], "next": [], "model": None}
+
+    fallback = by_hand(text)
+    if backend is None:
+        from . import models
+        try:
+            backend = models.backend_for(None)
+        except Exception:
+            return dict(fallback, model=None)
+
+    ask = f'{WORDS}\n\nHere is what he wrote.\n\n{text}\n\nReturn JSON: {{"done": [...], "next": [...]}}'
+    try:
+        result, model = _try(backend, ask)
+    except Exception:
+        # ollama down, no key, a timeout. His words still make a note.
+        return dict(fallback, model=None)
+
+    bad = voice.complaints(result["done"] + result["next"])
+    if bad:
+        try:
+            result, model = _try(backend, ask + (
+                "\n\nYour last attempt had these problems: " + ", ".join(bad)
+                + ". Write it again in plainer words, closer to what he wrote."))
+        except Exception:
+            return dict(fallback, model=None)
+        if voice.offences(result["done"] + result["next"]):
+            # Twice is enough. His sentences, unarranged, beat the model's.
+            return dict(fallback, model=None)
+
+    if not (result["done"] or result["next"]):
+        return dict(fallback, model=None)
+    return dict(result, model=model)
+
+
 # ------------------------------------------------------------------ storage
+
+def _range(start: date, end: date) -> str:
+    return f"{start.strftime('%a %-d %b')} \u2013 {end.strftime('%a %-d %b')}".upper()
+
 
 def _row_to_note(row) -> dict:
     """One row, ready for the template. His edit wins over what was generated."""
@@ -266,7 +390,7 @@ def _row_to_note(row) -> dict:
         "empty": not (shown.get("done") or shown.get("next")),
         "edited": edited is not None,
         "drawn_from": row["drawn_from"] or "nothing this week",
-        "range": f"{start.strftime('%a %-d %b')} – {end.strftime('%a %-d %b')}".upper(),
+        "range": _range(start, end),
         "week_start": row["week_start"],
         "generated_at": row["generated_at"],
     }
@@ -290,6 +414,42 @@ def latest() -> dict | None:
         row = conn.execute(
             "SELECT * FROM week_notes ORDER BY week_start DESC LIMIT 1").fetchone()
     return _row_to_note(row) if row else None
+
+
+def blank(week_start: date | None = None) -> dict:
+    """A week with no note yet, in the shape the template reads.
+
+    Home shows the card even when nothing has been written, because the box he
+    types his own week into lives on it. Without this, the one week that most
+    needs writing by hand -- a quiet one, where ENYGMA saw nothing -- is the one
+    week with nowhere to write it.
+    """
+    start, end = week_bounds(week_start)
+    return {"id": None, "done": [], "next": [], "empty": True, "edited": False,
+            "drawn_from": "nothing this week", "range": _range(start, end),
+            "week_start": start.isoformat(), "generated_at": None}
+
+
+def current() -> dict:
+    """What Home shows. This week if it has a note, else the last one written,
+    else an empty shell for this week."""
+    start, _ = week_bounds()
+    return stored(start) or latest() or blank(start)
+
+
+def ensure(week_start: str) -> None:
+    """A row for a week that never got one, so his own words have somewhere to
+    live. The generated body stays empty, because nothing was generated: that
+    keeps "Write it again" honest about what it would be replacing."""
+    start = date.fromisoformat(week_start)
+    end = start + timedelta(days=4)
+    with cursor() as conn:
+        conn.execute(
+            "INSERT INTO week_notes (week_start, week_end, body, drawn_from, "
+            "  sources, model) VALUES (?, ?, ?, ?, ?, NULL) "
+            "ON CONFLICT(week_start) DO NOTHING",
+            (start.isoformat(), end.isoformat(), '{"done": [], "next": []}',
+             "nothing this week", "{}"))
 
 
 def write(week_start: date | None = None, backend=None, keep_edit: bool = False) -> dict:
@@ -333,6 +493,25 @@ def save_edit(week_start: str, done: list[str], next_week: list[str]) -> dict:
             "UPDATE week_notes SET edited = ?, edited_at = datetime('now') "
             "WHERE week_start = ?", (payload, week_start))
     return stored(date.fromisoformat(week_start))
+
+
+def save_words(week_start: str, text: str, backend=None) -> dict:
+    """Format what he typed and store it as his version of the week.
+
+    It goes into the same slot as a hand edit, which does two things. What he
+    wrote replaces what the app inferred, rather than being merged into it, so a
+    week he described himself wins over a week ENYGMA guessed at. And "Write it
+    again" still puts the generated one back, because nothing was overwritten.
+
+    A section he said nothing about keeps what was already there. Writing three
+    lines about the tent rig should not silently empty next week.
+    """
+    ensure(week_start)
+    note = stored(date.fromisoformat(week_start))
+    written = from_words(text, backend=backend)
+    done = written["done"] or (note["done"] if note else [])
+    ahead = written["next"] or (note["next"] if note else [])
+    return save_edit(week_start, done, ahead)
 
 
 def as_email(note: dict) -> str:

@@ -2309,7 +2309,7 @@ restored enygma-20260827-045126.db.gz
     before you send it.
   </p>
 
-  <h2>The three buttons</h2>
+  <h2>The four controls</h2>
   <ul>
     <li><strong>Copy</strong> puts it on the clipboard as plain text, ready for
       an email body. The text comes from the server rather than from the page,
@@ -2317,6 +2317,8 @@ restored enygma-20260827-045126.db.gz
     <li><strong>Edit</strong> lets you fix a line in place.</li>
     <li><strong>Write it again</strong> regenerates it, and warns first if you
       have edited it.</li>
+    <li><strong>Write it in your own words</strong> opens a box you type into.
+      See below.</li>
   </ul>
 
   <div class="callout note">
@@ -2326,11 +2328,55 @@ restored enygma-20260827-045126.db.gz
     <em>Write it again</em> does replace it, which is why that one asks.
   </div>
 
+  <h2>Writing it yourself</h2>
+  <p>
+    Everything above builds the note out of what ENYGMA saw: meetings, closed
+    actions, documents. Most of a hardware week is not any of those. It happens
+    at a bench, and the app sees none of it.
+  </p>
+  <p>
+    So there is a second way in. <strong>Write it in your own words</strong>
+    opens a box on the card. Type the week the way you would say it out loud, one
+    thing per line, spelling and grammar as they come, and press
+    <strong>Lay it out</strong>. What comes back is the note.
+  </p>
+  <pre class="doc">re-flowed the ESP32 board, the I2C bus is stable now
+swapped the EZO probe
+still stuck on the humidity drift</pre>
+  <p>
+    The first two land under <em>what I got done</em>, the third under <em>what I
+    am working on next week</em>.
+  </p>
+
+  <div class="callout note">
+    <span class="label">Note</span>
+    The model is allowed to arrange your words. It is not allowed to add any. If
+    it tries — a bullet with "leveraged" in it, a fact you did not give it — the
+    whole attempt is thrown away and your own sentences are used instead, split
+    up but otherwise untouched. Worse prose, and true. The same thing happens if
+    ollama is stopped or a key is missing, so a box you typed into always
+    produces a note.
+  </div>
+
+  <p>
+    It saves into the same slot as a hand edit, which is what makes it safe to
+    press. What you wrote <em>replaces</em> what the app inferred rather than
+    being merged into it, so a week you described yourself wins over a week
+    ENYGMA guessed at. Nothing is destroyed: <em>Write it again</em> still puts
+    the built version back. A section you said nothing about keeps what was
+    already there.
+  </p>
+  <p>
+    The default model answers, which is Local unless you have changed it, so
+    nothing about your week leaves the Spark.
+  </p>
+
   <h2>A quiet week</h2>
   <p>
-    A week with nothing in it produces no note at all, rather than an empty card
-    that reads like a broken feature or a full one about work that did not
-    happen. The first invented line would cost you every note after it.
+    A week with nothing in it produces no note of its own, rather than a full one
+    about work that did not happen. The first invented line would cost you every
+    note after it. The card is still there, and the box is still on it, because a
+    week ENYGMA saw nothing of is exactly the week worth writing yourself.
   </p>
 
   <h2>What it is quietly building</h2>
@@ -2567,6 +2613,7 @@ restored enygma-20260827-045126.db.gz
       <tr><td>POST</td><td><code>/chat/{id}/document</code></td><td>Write</td><td>Save as: build a document from one answer, or from the thread.</td></tr>
     <tr><td>GET</td><td><code>/files/{id}</code></td><td>View</td><td>Download a document ENYGMA made. Always an attachment, never inline.</td></tr>
     <tr><td>POST</td><td><code>/week/{monday}/again</code></td><td>Write</td><td>Regenerate the Friday note. Replaces an edit, deliberately.</td></tr>
+    <tr><td>POST</td><td><code>/week/{monday}/words</code></td><td>Write</td><td>Lay out free text as the note. Saves into the edit slot.</td></tr>
     <tr><td>POST</td><td><code>/week/{monday}/edit</code></td><td>Write</td><td>Store his version beside the generated one, never on top of it.</td></tr>
     <tr><td>GET</td><td><code>/week/{monday}/text</code></td><td>View</td><td>The note as plain text, which is what Copy reads.</td></tr>
 </table>

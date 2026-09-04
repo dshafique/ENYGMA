@@ -44,8 +44,13 @@ def dashboard() -> dict:
     }
 
 
-def week_note() -> dict | None:
-    """The most recent Friday note, if there is one. Home only reads; the worker
-    is what writes, so opening the page never costs a model call."""
+def week_note() -> dict:
+    """The week the card shows. Home only reads; the worker is what writes, so
+    opening the page never costs a model call.
+
+    Never None. If no note has ever been written there is still a card, because
+    the box he types his own week into lives on it, and a week ENYGMA saw
+    nothing of is exactly the week he needs to write himself.
+    """
     from . import weeknote
-    return weeknote.latest()
+    return weeknote.current()

@@ -24,7 +24,7 @@
     {% if week_note.empty %}
       <p class="dim">Nothing to write up for this week. No meetings, no actions
         closed, nothing added. This stays empty rather than inventing a week you
-        did not have.</p>
+        did not have. Write it yourself below and it gets laid out for you.</p>
     {% else %}
       <p class="dim wn-intro">Ready to send. Read it before you do, and change
         anything that is not right.{% if week_note.edited %}
@@ -45,7 +45,10 @@
         {% endif %}
       </div>
 
-      <p class="wn-from">Built from {{ week_note.drawn_from }}.
+      <p class="wn-from">{% if week_note.edited %}This is your version.{%
+          if week_note.drawn_from != "nothing this week" %} The one it built came
+          from {{ week_note.drawn_from }}.{% endif %}{% else %}Built from {{
+          week_note.drawn_from }}.{% endif %}
         <a href="/meetings">Check the week</a></p>
 
       <div class="spread wn-actions">
@@ -55,6 +58,23 @@
         <span class="msg dim" id="wn-msg"></span>
       </div>
     {% endif %}
+
+    <div class="wn-words">
+      <button class="btn ghost sm" id="wn-words-open"
+              aria-expanded="false" aria-controls="wn-words-box">Write it in your own words</button>
+      <div class="wn-words-box" id="wn-words-box" hidden>
+        <label class="label" for="wn-text">Your week, roughly</label>
+        <textarea id="wn-text" rows="4" enterkeyhint="enter"
+                  placeholder="fixed the export, it was taking 40 seconds&#10;sat in on the LEAF meeting&#10;still stuck on the humidity drift"></textarea>
+        <p class="wn-hint">Rough is fine, one line each. It uses your words, not
+          its own. Write it again still brings the built one back.</p>
+        <div class="spread wn-words-actions">
+          <button class="btn sm" id="wn-words-go">Lay it out</button>
+          <button class="btn ghost sm" id="wn-words-cancel">Cancel</button>
+          <span class="msg dim" id="wn-words-msg"></span>
+        </div>
+      </div>
+    </div>
   </div>
   {% endif %}
 

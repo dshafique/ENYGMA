@@ -890,6 +890,28 @@ async def week_edit(week_start: str, request: Request):
                                        body.get("next") or [])}
 
 
+@app.post("/week/{week_start}/words")
+async def week_words(week_start: str, request: Request):
+    """The week in his own words, formatted into the note.
+
+    Same slot as a hand edit: what he wrote replaces what the app inferred, and
+    "Write it again" still brings the generated one back.
+    """
+    require_session(request)
+    body = await request.json()
+    text = (body.get("text") or "").strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="Write something first")
+    if len(text) > 6000:
+        raise HTTPException(
+            status_code=400,
+            detail="That is longer than a week. Keep it under a few paragraphs.")
+    try:
+        return {"note": weeknote.save_words(week_start, text)}
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Not a date")
+
+
 @app.get("/week/{week_start}/text")
 def week_text(week_start: str, request: Request):
     """The note as it would land in an email. The clipboard reads this rather

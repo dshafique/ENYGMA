@@ -455,6 +455,30 @@ h3 { font-size: 15px; font-weight: 600; margin: 0; }
   .wn-body { padding: var(--space-16); }
   .wn-body li { font-size: 14px; line-height: 22px; }
 }
+/* The other way in: he types the week and it gets laid out. Folded away behind
+   one button, because on most days the built note is right and a second text
+   box on the card would only be one more thing between him and Copy. */
+.wn-words { display: flex; flex-direction: column; gap: var(--space-12);
+            margin-top: var(--space-4); }
+.wn-words > .btn { align-self: flex-start; }
+/* display:flex on a class beats the browser's own [hidden] rule, so the box
+   opened itself the moment it was styled. Every collapsed panel in this file
+   needs its own hidden rule for the same reason. */
+.wn-words-box[hidden] { display: none; }
+.wn-words-box { display: flex; flex-direction: column; gap: var(--space-8);
+                background: var(--surface); border: 1px solid var(--border-divider);
+                border-radius: var(--radius-lg); padding: var(--space-16); }
+.wn-words-box textarea {
+  width: 100%; min-width: 0; min-height: 96px; max-height: 260px; resize: vertical;
+  padding: var(--space-12); margin: 0;
+  border-radius: var(--radius-sm); border: 1px solid var(--border-rest);
+  background: var(--surface-low); color: var(--text);
+  font-family: var(--font-prose); font-size: 15px; line-height: 21px;
+}
+.wn-words-box textarea:disabled { opacity: .6; }
+.wn-hint { font-size: 12px; line-height: 18px; color: var(--text-muted); margin: 0; }
+.wn-words-actions { margin-top: var(--space-4); }
+
 pre.doc {
   white-space: pre-wrap; word-wrap: break-word; font-family: var(--font-prose);
   font-size: 14px; line-height: 22px; color: var(--text-dim);
@@ -860,6 +884,10 @@ pre.doc {
                 min-width: 88px; min-height: 88px; }
 .brought.shot img { display: block; max-width: 220px; max-height: 220px; }
 
+/* Same trap as .wn-words-box: display on a class beats the browser's own
+   [hidden] rule, so with nothing attached this was still an empty flex row with
+   8px of margin under it, sitting between the last answer and the composer. */
+.waiting[hidden] { display: none; }
 .waiting { display: flex; flex-wrap: wrap; gap: var(--space-6);
            max-width: var(--reading); margin: 0 auto var(--space-8); }
 .waiting-one { height: 28px; padding-right: var(--space-6); font-size: 12px;
