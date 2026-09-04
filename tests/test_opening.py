@@ -188,10 +188,25 @@ def test_nothing_unreleased_survives_into_a_build():
             "run tools/stamp_release.py"
 
 
-def test_the_newest_entry_describes_the_build_that_is_stamped():
-    """The whole point of moving the number out of a person's hands."""
+def test_the_changelog_never_claims_a_build_that_does_not_exist_yet():
+    """Behind the build is normal; ahead of it is a lie.
+
+    The build number increments on every commit. The changelog only gains an
+    entry when there is something to tell him, so a release that fixed a test
+    has a number and no entry, and the newest entry is legitimately older than
+    the build. What must never happen is the reverse: an entry numbered higher
+    than anything that has been built describes a release nobody can run, which
+    is the exact failure that moving the number out of a person's hands was
+    meant to prevent.
+    """
     from src import changelog
-    stamped = (ROOT / "MARK")
-    if not stamped.exists():
+    stamped = ROOT / "MARK"
+    if not stamped.exists() or not changelog.latest():
         return
-    assert changelog.latest() == stamped.read_text().strip()
+
+    def number(mark: str) -> int:
+        return int(mark.rsplit(".", 1)[1])
+
+    assert number(changelog.latest()) <= number(stamped.read_text().strip()), (
+        f"changelog says {changelog.latest()}, the build is "
+        f"{stamped.read_text().strip()}")
