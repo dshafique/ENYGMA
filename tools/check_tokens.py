@@ -5,6 +5,11 @@ and the browser drops it, so a layout quietly collapses and nothing in the conso
 says why. This cost PHNTM three separate bugs: an unreachable light mode, a
 transparent nav rail, and a two column grid that folded to one.
 
+A var() with a fallback is exempt, because it cannot fail that way: the fallback
+resolves and the declaration stands. That matters for values set at runtime
+rather than designed -- the keyboard inset, for one -- which have no business in
+a token file but must still be referable before any JavaScript has run.
+
 Runs on: any machine.
 
     python3 tools/check_tokens.py
@@ -20,7 +25,8 @@ CSS = ROOT / "src/static/css"
 SCANNED = list(CSS.glob("*.css")) + list((ROOT / "src/templates").glob("*.html"))
 
 DEFINE = re.compile(r"(--[a-z0-9-]+)\s*:")
-USE = re.compile(r"var\(\s*(--[a-z0-9-]+)")
+# Only a bare var(--x). A var(--x, something) carries its own answer.
+USE = re.compile(r"var\(\s*(--[a-z0-9-]+)\s*\)")
 
 
 def defined() -> set[str]:

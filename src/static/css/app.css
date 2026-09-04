@@ -108,7 +108,7 @@ a:hover { text-decoration: underline; }
 .iconbtn.on { background: var(--surface-high); color: var(--text); }
 
 .tabbar {
-  display: none; position: fixed; inset: auto 0 0 0; z-index: 40;
+  display: none; position: fixed; inset: auto 0 var(--kb, 0px) 0; z-index: 40;
   height: calc(var(--tabbar) + env(safe-area-inset-bottom));
   padding-bottom: env(safe-area-inset-bottom);
   border-top: 1px solid var(--border-divider);
@@ -598,7 +598,7 @@ pre.doc {
    answers pushed it past the fold and he had to scroll the whole conversation
    to reach the box. On a phone that reads as the writing bar not fitting the
    screen, which is exactly how it was reported. */
-.composer { position: sticky; bottom: 0; z-index: 25;
+.composer { position: sticky; bottom: var(--kb, 0px); z-index: 25;
             border-top: 1px solid var(--border-divider); padding: var(--space-16) var(--space-32);
             background: var(--surface); }
 .composer form { max-width: var(--reading); margin: 0 auto; display: flex; gap: var(--space-8);
@@ -632,13 +632,14 @@ pre.doc {
   .composer { padding-bottom: var(--space-8); }
   /* The tab bar is fixed over the bottom of the page, so sticking to 0 would
      park the composer underneath it. */
-  .composer { bottom: calc(var(--tabbar) + env(safe-area-inset-bottom)); }
+  .composer { bottom: calc(var(--kb, 0px) + var(--tabbar)
+                           + env(safe-area-inset-bottom)); }
   /* While he is typing, the six tabs are 60px he does not need and cannot
      spare: with the keyboard up on a cover screen there is barely a hundred
      left. They come back the moment the box loses focus. */
   html.typing .tabbar { display: none; }
   html.typing body:not(.bare) { padding-bottom: 0; }
-  html.typing .composer { bottom: 0; }
+  html.typing .composer { bottom: var(--kb, 0px); }
 }
 @media (max-width: 380px) {
   /* Cover-screen width. Every horizontal pixel spent on padding is one the
@@ -957,3 +958,27 @@ html.splash-done .splash { display: none; }
 .release ul { margin: 0; padding-left: var(--space-20);
               display: flex; flex-direction: column; gap: var(--space-6); }
 .release li { font-size: 14px; line-height: 21px; color: var(--text-dim); }
+
+/* This month, on Home.
+   A number and two bars. Hierarchy from value and weight as everywhere else:
+   the bars are the same grey, and length is the only thing carrying the
+   comparison, because one model costing more than another is a fact about
+   size and not about danger. */
+.spendcard .spendrow { display: flex; align-items: center; gap: var(--space-24); }
+.spendtotal { display: flex; flex-direction: column; gap: var(--space-2); flex: none; }
+.spendtotal .big { font-size: 30px; line-height: 34px; color: var(--text); }
+.spendbars { flex: 1; min-width: 0; display: flex; flex-direction: column;
+             gap: var(--space-8); }
+.spendbar { display: grid; grid-template-columns: 4.2rem 1fr auto;
+            align-items: center; gap: var(--space-8); }
+.spendbar .who { font-size: 13px; color: var(--text-dim); }
+.spendbar .track { height: 6px; border-radius: var(--radius-pill);
+                   background: var(--surface-container); overflow: hidden; }
+.spendbar .track i { display: block; height: 100%; background: var(--text-muted);
+                     border-radius: var(--radius-pill); }
+.spendbar .amt { font-size: 12px; color: var(--text-muted); }
+@media (max-width: 599px) {
+  .spendcard .spendrow { flex-direction: column; align-items: stretch;
+                         gap: var(--space-16); }
+  .spendbar { grid-template-columns: 4.2rem 1fr auto; }
+}

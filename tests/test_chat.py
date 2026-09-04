@@ -162,7 +162,9 @@ def test_the_writing_bar_sticks_to_the_screen_not_to_the_transcript():
     css = _css()
     block = css[css.index(".composer {"):css.index(".composer form {")]
     assert "position: sticky" in block
-    assert "bottom: 0" in block
+    # Offset by the measured keyboard rather than pinned to a viewport bottom
+    # that some browsers never move.
+    assert "bottom: var(--kb, 0px)" in block
 
 
 def test_the_composer_clears_the_tab_bar_on_a_phone():
@@ -170,7 +172,8 @@ def test_the_composer_clears_the_tab_bar_on_a_phone():
     css = _css()
     phone = css[css.index("@media (max-width: 899px) {\n  .chatwrap"):]
     phone = phone[:phone.index("@media (max-width: 380px)")]
-    assert "bottom: calc(var(--tabbar) + env(safe-area-inset-bottom))" in phone
+    assert "var(--tabbar)" in phone and "env(safe-area-inset-bottom)" in phone
+    assert "var(--kb, 0px)" in phone, "it does not clear the keyboard"
 
 
 def test_the_send_button_cannot_be_squeezed_off_a_narrow_screen():

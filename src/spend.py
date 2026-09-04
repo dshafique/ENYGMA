@@ -134,3 +134,26 @@ def summary() -> list[dict]:
              "money": as_money(r["total"] or 0),
              "input_tokens": r["tin"] or 0, "output_tokens": r["tout"] or 0}
             for r in rows]
+
+
+def for_home() -> dict | None:
+    """The month, as one line and a couple of bars, or nothing at all.
+
+    Nothing at all is the common case and the right one: a month spent entirely
+    on the local model has cost nothing, and a card reading zero pounds every
+    day is a card he stops seeing. It appears when there is something to say.
+    """
+    rows = summary()
+    if not rows:
+        return None
+    total = sum(r["total"] for r in rows)
+    if total <= 0:
+        return None
+    biggest = max(r["total"] for r in rows) or 1
+    return {
+        "total": total,
+        "total_money": as_money(total),
+        "rows": [dict(r, share=round(r["total"] / biggest * 100)) for r in rows],
+        "note": ("ENYGMA's own count from the tokens each answer used. "
+                 "Local costs nothing and is not counted."),
+    }

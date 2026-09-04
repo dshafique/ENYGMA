@@ -677,6 +677,47 @@ $("#retry")?.addEventListener("click", async (e) => {
   });
 }
 
+/* ------------------------------------------------------------- the keyboard */
+{
+  /* Measure the keyboard instead of trusting the browser to move things.
+     interactive-widget=resizes-content is a Chrome feature. Samsung Internet,
+     which is the default browser on the phone this runs on, does not honour it:
+     the layout viewport never shrinks, so anything stuck to the bottom of it is
+     stuck behind the keyboard, and he is typing into a box he cannot see.
+
+     visualViewport is the thing that always knows. The difference between it
+     and the window is the keyboard, whatever the browser has decided to do
+     about the layout, so everything that needs to sit above the keyboard is
+     offset by that one number. */
+  const vv = window.visualViewport;
+  if (vv) {
+    const root = document.documentElement;
+    const measure = () => {
+      // How much of the window the keyboard is covering.
+      const covered = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+      // Under about 80px it is a browser chrome change, not a keyboard, and
+      // moving the writing bar for a toolbar sliding away looks like a fault.
+      root.style.setProperty("--kb", covered > 80 ? `${Math.round(covered)}px` : "0px");
+    };
+    vv.addEventListener("resize", measure);
+    vv.addEventListener("scroll", measure);
+    measure();
+
+    /* And keep the caret in sight. A textarea that has grown past the screen
+       will happily let him type below the fold, and the browser only scrolls
+       the caret into view when it thinks the viewport changed. */
+    const inSight = (el) => {
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      const floor = vv.height - 24;
+      if (r.bottom > floor) window.scrollBy({ top: r.bottom - floor, behavior: "smooth" });
+    };
+    document.addEventListener("focusin", (e) => {
+      if (e.target.matches("textarea, input")) setTimeout(() => inSight(e.target), 300);
+    });
+  }
+}
+
 /* -------------------------------------------------------------- the opening */
 {
   /* A tap ends it. It is under a second, but a second is a long time to a

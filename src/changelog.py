@@ -29,6 +29,16 @@ UNRELEASED = "UNRELEASED"
 
 RELEASES = [
     {
+        "mark": UNRELEASED,
+        "date": "2026-09-04",
+        "headline": "Rotation, the keyboard, and what it costs",
+        "items": [
+            "The app follows your phone's rotation lock instead of overriding it.",
+            "The writing bar stays above the keyboard, on any browser.",
+            "Home shows what the paid models have cost this month.",
+        ],
+    },
+    {
         "mark": "Mk II.30",
         "date": "2026-09-04",
         "headline": "The bench, and a say in who answers",

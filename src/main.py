@@ -133,6 +133,7 @@ def index(request: Request):
         handle = conn.execute("SELECT handle FROM operator WHERE id = 1").fetchone()
     return page(request, "home.html", "home", {
         "d": home_repo.dashboard(),
+        "spending": spend.for_home(),
         "week_note": home_repo.week_note(),
         "greeting": _greeting(),
         "handle": (handle["handle"] if handle else "there").title(),

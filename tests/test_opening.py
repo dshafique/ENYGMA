@@ -247,3 +247,41 @@ def test_the_list_is_derived_rather_than_written_down():
     assert "KNOWN = known_settings()" in source
     # No hand-written set left behind to drift alongside it.
     assert '"ENYGMA_PORT", "ENYGMA_HOST"' not in source
+
+
+def test_the_app_does_not_override_the_phones_rotation_lock():
+    """"orientation": "any" is an explicit claim that the app handles every
+    orientation, which is what makes Android ignore his rotation lock. Saying
+    nothing defers to the phone, which is what he asked for."""
+    import json
+    manifest = json.loads((ROOT / "src/static/manifest.webmanifest").read_text())
+    assert "orientation" not in manifest, (
+        f"the manifest claims orientation {manifest.get('orientation')!r}")
+
+
+def test_everything_pinned_to_the_bottom_clears_the_measured_keyboard():
+    """interactive-widget=resizes-content is a Chrome feature. Samsung Internet
+    is the default browser on the phone this runs on and does not honour it, so
+    the layout viewport never shrinks and anything stuck to its bottom is behind
+    the keyboard. visualViewport always knows."""
+    css = (ROOT / "src/static/css/app.css").read_text()
+    js = (ROOT / "src/static/js/app.js").read_text()
+    assert "visualViewport" in js
+    assert '--kb' in js, "nothing publishes the measurement"
+    block = js[js.index("the keyboard */"):js.index("the opening */")]
+    assert "window.innerHeight - vv.height" in block
+    # The two things that sit on the bottom edge.
+    assert "bottom: var(--kb, 0px)" in css
+    assert "inset: auto 0 var(--kb, 0px) 0" in css
+
+
+def test_a_var_with_a_fallback_is_not_a_token_violation():
+    """The linter exists because an undefined property silently drops the whole
+    declaration. A fallback makes that impossible, and runtime values like the
+    keyboard inset have no business in a token file."""
+    import subprocess
+    out = subprocess.run([sys.executable, str(ROOT / "tools/check_tokens.py")],
+                         capture_output=True, text=True)
+    assert out.returncode == 0, out.stdout
+    source = (ROOT / "tools/check_tokens.py").read_text()
+    assert r"var\(\s*(--[a-z0-9-]+)\s*\)" in source, "it still flags fallbacks"

@@ -58,6 +58,29 @@
   </div>
   {% endif %}
 
+  {% if spending %}
+  <a class="card link spendcard" href="/settings">
+    <div class="card-head"><h2>This month</h2>
+      <span class="label">Estimated</span></div>
+    <div class="spendrow">
+      <div class="spendtotal">
+        <span class="big mono">{{ spending.total_money }}</span>
+        <span class="label">so far</span>
+      </div>
+      <div class="spendbars">
+        {% for row in spending.rows %}
+        <div class="spendbar">
+          <span class="who">{{ row.name }}</span>
+          <span class="track"><i style="width: {{ row.share }}%"></i></span>
+          <span class="amt mono">{{ row.money }}</span>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    <p class="sub">{{ spending.note }}</p>
+  </a>
+  {% endif %}
+
   <a class="card link" href="/meetings">
     <div class="card-head"><h2>Meetings</h2><span class="label">{{ d.counts.total }} total</span></div>
     {% if d.recent %}
