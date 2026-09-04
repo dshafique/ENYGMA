@@ -1,0 +1,14 @@
+-- An answer he stopped is a real answer, and half a sentence.
+--
+-- The stop button keeps whatever had arrived, because he pressed it when he had
+-- what he needed, and throwing that away would make the button useless. But the
+-- text ends mid-thought, and the next turn feeds the whole thread back to the
+-- model as things ENYGMA has said. Without a mark, the model reads a sentence
+-- that stops in the middle as a complete statement and carries on from a claim
+-- nobody finished making.
+--
+-- So: a turn can be marked stopped. It stays on screen and in the history --
+-- unlike a transient error, this really was said -- and the transcript given to
+-- the model says where it was cut off, so it can pick the thought back up
+-- rather than treating the fragment as a finished thought.
+ALTER TABLE chat_messages ADD COLUMN stopped INTEGER NOT NULL DEFAULT 0;

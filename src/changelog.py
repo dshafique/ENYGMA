@@ -29,6 +29,19 @@ UNRELEASED = "UNRELEASED"
 
 RELEASES = [
     {
+        "mark": "Mk II.38",
+        "date": "2026-09-04",
+        "headline": "Answers arrive as they are written",
+        "items": [
+            "Chat writes the answer out as it comes rather than making you wait "
+            "for all of it.",
+            "The send button becomes a stop button while it writes. Press it and "
+            "it keeps what had arrived.",
+            "A stopped answer is marked, so the next question knows where it "
+            "was cut off.",
+        ],
+    },
+    {
         "mark": "Mk II.37",
         "date": "2026-09-04",
         "headline": "Write your own week",

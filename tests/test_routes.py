@@ -134,3 +134,64 @@ def test_the_home_page_carries_the_box():
     body = client(True).get("/").text
     assert 'id="wn-words-box"' in body
     assert "Write it in your own words" in body
+
+
+# --------------------------------------------------- streaming an answer
+
+def _thread() -> int:
+    from src import chat
+    return chat.start("streamed")
+
+
+def test_the_stream_needs_a_session():
+    r = client().post(f"/chat/{_thread()}/stream", data={"body": "hello"})
+    assert r.status_code in (302, 401, 403)
+
+
+def test_stopping_needs_a_session():
+    r = client().post(f"/chat/{_thread()}/stop")
+    assert r.status_code in (302, 401, 403)
+
+
+def test_a_stream_is_server_sent_events_and_is_never_cached():
+    """A cached answer would be shown again for a different question, and a
+    proxy that buffers turns streaming back into the blocking request it
+    replaced."""
+    c = client(True)
+    with c.stream("POST", f"/chat/{_thread()}/stream", data={"body": "what is i2c"}) as r:
+        assert r.status_code == 200
+        assert r.headers["content-type"].startswith("text/event-stream")
+        assert r.headers["cache-control"] == "no-store"
+        assert r.headers["x-accel-buffering"] == "no"
+        r.read()
+
+
+def test_a_stream_ends_with_exactly_one_done():
+    import json as _json
+    c = client(True)
+    events = []
+    with c.stream("POST", f"/chat/{_thread()}/stream", data={"body": "what is i2c"}) as r:
+        for line in r.iter_lines():
+            if line.startswith("data:"):
+                events.append(_json.loads(line[5:]))
+    assert sum(1 for e in events if "done" in e) == 1
+    assert "done" in events[-1], "something was sent after the answer was finished"
+
+
+def test_an_empty_message_fails_before_the_stream_starts():
+    """Once a stream has started the status is already 200 and a failure can
+    only be described inside it, where a browser will not treat it as one."""
+    r = client(True).post(f"/chat/{_thread()}/stream", data={"body": "   "})
+    assert r.status_code == 400
+
+
+def test_streaming_into_a_thread_that_is_not_there_is_a_404():
+    r = client(True).post("/chat/999999/stream", data={"body": "hello"})
+    assert r.status_code == 404
+
+
+def test_the_form_still_posts_without_javascript():
+    """Streaming is an enhancement. The form's action is the plain route, so a
+    phone with a broken script still sends messages."""
+    body = client(True).get(f"/chat/{_thread()}").text
+    assert '/say" id="say"' in body

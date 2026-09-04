@@ -129,6 +129,20 @@ sudo bash deploy/add-tunnel-route.sh      # enygma.arkhm.io, safely
 sudo bash deploy/disk-ceiling.sh 200      # 200GB, before the first upload
 ```
 
+### Confirming a deploy took
+
+```bash
+curl -s localhost:4073/healthz
+```
+
+The `mark` and `build` in the answer must match the `MARK` and `VERSION` in the
+zip you just installed. If the mark is the previous release, the unzip did not
+overwrite: check the `scp` actually replaced `~/enygma.zip` and re-run `unzip -o`.
+
+**Port 4073, not 8000.** PHNTM is on 8000 and also answers with FastAPI, so
+`curl localhost:8000/healthz` returns a JSON `Not Found` that looks like a broken
+ENYGMA and is not one.
+
 `add-tunnel-route.sh` backs the config up, inserts the rule above the catch-all,
 validates it, and then **prints where every existing hostname routes and waits for
 you to confirm** before it restarts anything. If validation fails it restores the

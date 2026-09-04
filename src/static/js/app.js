@@ -562,7 +562,9 @@ $("#retry")?.addEventListener("click", async (e) => {
   toBottom();
   const body = $("#body");
   const form = $("#say");
-  const button = form?.querySelector("button[type=submit]");
+  // The form still posts to /say without JavaScript, so the thread id comes off
+  // its action rather than from a second attribute that could disagree with it.
+  const threadId = (form?.getAttribute("action") || "").split("/")[2];
 
   const grow = () => {
     if (!body) return;
@@ -587,8 +589,9 @@ $("#retry")?.addEventListener("click", async (e) => {
   const typing = (on) => document.documentElement.classList.toggle("typing", on);
   const composer = form?.closest(".composer");
 
-  button?.addEventListener("pointerdown", (e) => e.preventDefault());
-  button?.addEventListener("mousedown", (e) => e.preventDefault());
+  const sendBtn = $("#send");
+  sendBtn?.addEventListener("pointerdown", (e) => e.preventDefault());
+  sendBtn?.addEventListener("mousedown", (e) => e.preventDefault());
 
   let leaving = null;
   composer?.addEventListener("focusin", () => {
@@ -617,10 +620,19 @@ $("#retry")?.addEventListener("click", async (e) => {
     form?.requestSubmit();
   });
 
-  /* One turn at a time. Without this, every press while an answer was being
-     written started another identical turn, because the field still held the
-     text and nothing said a request was already in flight. */
+  /* One turn at a time, and the button that sends is the button that stops.
+
+     Two controls would be one more thing to hit on a folding phone, and every
+     chat he has used puts Stop exactly where Send was. So the button changes
+     face while an answer is being written and changes back when it is done. */
   let sending = false;
+
+  const asStop = (on) => {
+    if (!sendBtn) return;
+    sendBtn.classList.toggle("stopping", on);
+    sendBtn.setAttribute("aria-label", on ? "Stop" : "Send");
+    sendBtn.disabled = false;
+  };
 
   const pending = (text) => {
     if (!convo) return null;
@@ -641,18 +653,28 @@ $("#retry")?.addEventListener("click", async (e) => {
 
   form?.addEventListener("submit", async (e) => {
     e.preventDefault();
-    if (sending) return;
+
+    /* Second press: stop. The server is told, rather than the connection being
+       dropped, so the server keeps what it generated and writes it down. It
+       decides what was said; this page never tells it. */
+    if (sending) {
+      asStop(false);
+      sendBtn && (sendBtn.disabled = true);
+      try { await post(`/chat/${threadId}/stop`, {}); } catch (err) { /* it ends anyway */ }
+      return;
+    }
+
     const text = body.value.trim();
     if (!text) return;
 
     sending = true;
-    body.disabled = true;
-    if (button) button.disabled = true;
     // Cleared straight away: whatever else happens, the same sentence cannot be
     // sent twice by a second press landing on text that was never taken away.
     body.value = "";
     grow();
     const shown = pending(text);
+    const bubble = shown?.[1]?.querySelector(".bubble");
+    asStop(true);
 
     const restore = () => {
       shown?.forEach((n) => n.remove());
@@ -661,18 +683,63 @@ $("#retry")?.addEventListener("click", async (e) => {
       body.focus();
     };
 
+    /* Deltas land in the bubble as they arrive. Written as textContent, never
+       innerHTML: what comes back is model output, and it goes on screen the
+       same way a stored turn does. */
+    let got = "";
+    let started = false;
+    const put = (piece) => {
+      if (!bubble) return;
+      if (!started) {
+        bubble.textContent = "";
+        bubble.classList.remove("dim");
+        shown?.[1]?.classList.remove("pending");
+        shown?.[1]?.classList.add("writing");
+        started = true;
+      }
+      got += piece;
+      bubble.textContent = got;
+      toBottom();
+    };
+
     try {
       const data = new FormData();
       data.append("body", text);
-      const res = await send(form.action, { method: "POST", body: data });
-      if (!res.ok) { restore(); return; }
+      const res = await send(`/chat/${threadId}/stream`, { method: "POST", body: data });
+      if (!res.ok || !res.body) { restore(); return; }
+
+      const reader = res.body.getReader();
+      const decode = new TextDecoder();
+      let buffer = "";
+      let ended = false;
+
+      while (!ended) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decode.decode(value, { stream: true });
+        // SSE separates events with a blank line. A partial one stays in the
+        // buffer until the rest of it turns up.
+        let cut;
+        while ((cut = buffer.indexOf("\n\n")) !== -1) {
+          const chunk = buffer.slice(0, cut);
+          buffer = buffer.slice(cut + 2);
+          if (!chunk.startsWith("data:")) continue;
+          let event;
+          try { event = JSON.parse(chunk.slice(5).trim()); } catch (err) { continue; }
+          if (event.delta) put(event.delta);
+          if (event.replace) { got = ""; started = false; put(event.replace); }
+          if (event.done) { ended = true; break; }
+        }
+      }
+      // The turn is stored, and a reload is what renders it properly: the Save
+      // as control, any file it built, the mark on a stopped answer.
       location.reload();
     } catch (err) {
-      restore();
+      if (!got) restore();
+      else location.reload();
     } finally {
       sending = false;
-      body.disabled = false;
-      if (button) button.disabled = false;
+      asStop(false);
     }
   });
 }

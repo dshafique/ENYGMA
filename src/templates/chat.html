@@ -50,6 +50,7 @@
         <div class="turn {{ m.role }}" data-message="{{ m.id }}">
           <div class="who"><span class="label">{{ 'You' if m.role == 'operator' else 'ENYGMA' }}</span></div>
           <div class="bubble">{{ m.body }}</div>
+          {% if m.stopped %}<p class="stoppedmark"><span class="label">You stopped this</span></p>{% endif %}
           {% if m.files %}
           <div class="broughtlist">
             {% for f in m.files %}
@@ -93,7 +94,12 @@
           </span>
           {% endfor %}
         </div>
-        <form method="post" action="/chat/{{ current.thread.id }}/say" id="say">
+        <!-- novalidate, because the button that sends is the button that stops.
+             By the time he presses Stop the box has been cleared, and the
+             browser's own "Please fill out this field" refused the submit and
+             swallowed the press: the answer carried on writing itself with a
+             stop button that did nothing. Empty is checked in the handler. -->
+        <form method="post" action="/chat/{{ current.thread.id }}/say" id="say" novalidate>
           <div class="composer-row">
             <label class="attach" title="Attach a file or a photo">
               <input type="file" id="attach" multiple
@@ -101,8 +107,11 @@
               {{ i.icon('plus') }}
             </label>
             <textarea name="body" id="body" rows="1" placeholder="Ask ENYGMA"
-                      enterkeyhint="enter" required></textarea>
-            <button class="btn" type="submit" aria-label="Send">{{ i.icon('send') }}</button>
+                      enterkeyhint="enter"></textarea>
+            <button class="btn sendbtn" type="submit" id="send" aria-label="Send">
+              <span class="asend">{{ i.icon('send') }}</span>
+              <span class="astop">{{ i.icon('stop') }}</span>
+            </button>
           </div>
           <div class="composer-foot">
             <span class="modelwrap" data-model="{{ current.model }}">
@@ -120,7 +129,7 @@
           </div>
         </form>
         {% if not current.messages %}
-        <p class="composer-hint">Return starts a new line. Send with the button.</p>
+        <p class="composer-hint">Return starts a new line. Send with the button, and press it again to stop an answer.</p>
         {% endif %}
       </div>
     {% else %}

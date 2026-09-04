@@ -12,7 +12,8 @@ from datetime import datetime
 from pathlib import Path
 
 from fastapi import FastAPI, Request, Response, HTTPException, UploadFile, File
-from fastapi.responses import JSONResponse, HTMLResponse, RedirectResponse, FileResponse
+from fastapi.responses import (JSONResponse, HTMLResponse, RedirectResponse,
+                               FileResponse, StreamingResponse)
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -669,6 +670,59 @@ async def chat_say(thread_id: int, request: Request):
         return RedirectResponse(f"/chat/{thread_id}", status_code=303)
     chat_repo.say(thread_id, body)
     return RedirectResponse(f"/chat/{thread_id}", status_code=303)
+
+
+# Server-sent events. One JSON object per event, which is more than the format
+# needs -- but a delta can contain a newline, and SSE ends an event at a blank
+# line, so sending the text raw would break an answer in half at every
+# paragraph. JSON has no such edge.
+def _sse(event: dict) -> str:
+    return "data: " + json.dumps(event, ensure_ascii=False) + "\n\n"
+
+
+@app.post("/chat/{thread_id}/stream")
+async def chat_stream(thread_id: int, request: Request):
+    """His message in, the answer out a piece at a time.
+
+    Everything that can fail with a status code -- no session, no thread, an
+    empty message -- fails before the first byte, because once a stream has
+    started the status is already 200 and a failure can only be described inside
+    it, where a browser will not treat it as an error.
+    """
+    require_session(request)
+    if chat_repo.thread(thread_id) is None:
+        raise HTTPException(status_code=404, detail="No such thread")
+    form = await request.form()
+    try:
+        taken = chat_repo.take(thread_id, str(form.get("body") or ""))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    def events():
+        if "settled" in taken:
+            done = taken["settled"]
+            yield _sse({"delta": done["reply"]})
+            yield _sse({"done": dict(done, stopped=False)})
+            return
+        for event in chat_repo.reply(thread_id, taken["plan"]):
+            yield _sse(event)
+
+    return StreamingResponse(events(), media_type="text/event-stream", headers={
+        # Nothing between here and the phone may hold these back and hand them
+        # over in one lump, which is exactly what a proxy does by default and
+        # would turn streaming back into the blocking request it replaced.
+        "Cache-Control": "no-store",
+        "X-Accel-Buffering": "no",
+    })
+
+
+@app.post("/chat/{thread_id}/stop")
+def chat_stop(thread_id: int, request: Request):
+    """Enough. Checked between chunks, so it lands within a token or two, and
+    whatever had already arrived is kept."""
+    require_session(request)
+    chat_repo.ask_to_stop(thread_id)
+    return {"ok": True}
 
 
 @app.post("/chat/{thread_id}/attach")

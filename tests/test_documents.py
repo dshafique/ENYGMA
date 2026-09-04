@@ -274,7 +274,7 @@ def test_pressing_send_does_not_move_the_send_button():
           / "src/static/js/app.js").read_text()
     chat = js[js.index("-------- chat */"):js.index("------- settings */")]
     # Pressing Send must not take focus off the box.
-    assert 'button?.addEventListener("pointerdown", (e) => e.preventDefault());' in chat
+    assert 'sendBtn?.addEventListener("pointerdown", (e) => e.preventDefault());' in chat
     # And the bar comes back only once focus has genuinely left the composer.
     assert '"focusout"' in chat and '"focusin"' in chat
     assert "composer.contains(document.activeElement)" in chat

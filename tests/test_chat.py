@@ -88,16 +88,25 @@ def test_return_does_not_send_where_there_is_no_shift_key():
 
 
 def test_the_composer_cannot_fire_twice():
-    """The in-flight guard, and the field cleared before the request goes out, so
-    a second press has nothing left to resend."""
+    """A second press while an answer is coming must never start a second turn.
+
+    It used to return and do nothing. Now it stops the answer, which is what the
+    button says it does at that moment -- but the thing being guarded is the
+    same: whatever a second press means, it is not another turn. And the field
+    is still cleared before the request goes out, so there is nothing left in it
+    for a stray press to resend."""
     js = (pathlib.Path(__file__).resolve().parent.parent
           / "src/static/js/app.js").read_text()
     chat_block = js[js.index("-------- chat */"):js.index("------- settings */")]
-    assert "if (sending) return;" in chat_block
-    assert "body.disabled = true" in chat_block
+    assert "if (sending) {" in chat_block
+    guard = chat_block.index("if (sending) {")
+    # The stop branch must return before anything that could send a message.
+    branch = chat_block[guard:guard + 400]
+    assert "/stop`" in branch and "return;" in branch
+    assert "/stream`" not in branch, "a second press can still start a turn"
     # Cleared before the await, not after it.
     cleared = chat_block.index('body.value = "";')
-    awaited = chat_block.index("await send(form.action")
+    awaited = chat_block.index("await send(`/chat/${threadId}/stream`")
     assert cleared < awaited, "the field is still holding the text during the request"
 
 
@@ -259,3 +268,250 @@ def test_a_failure_is_shown_to_him_but_never_taught_to_the_model():
     assert "Errno 30" not in remembered, "the failure is still being taught"
     assert "Read-only" not in remembered
     assert "Keep one file per day" in remembered, "real turns were dropped too"
+
+
+# ------------------------------------------------------- stopping an answer
+#
+# Chat used to be one blocking request per turn: press send, watch a still
+# screen for however long the local model took, get the whole answer at once.
+# Now it streams and Send becomes Stop. The tests below are about the half of
+# that which can go wrong quietly -- what is kept, what is thrown away, and what
+# the model is told about it next time.
+
+
+class Streamer:
+    """A backend that hands over one word at a time and counts how far it got."""
+    model = "fake"
+
+    def __init__(self, text="Use 4.7k pull-ups on both lines.", after=None):
+        self.words = text.split(" ")
+        self.given = 0
+        self.after = after            # called with the count after each word
+        self.asked = []
+
+    def stream(self, parts, schema=None):
+        self.asked.append(parts[0]["text"])
+        for at, word in enumerate(self.words):
+            self.given = at + 1
+            yield word if at == 0 else " " + word
+            if self.after:
+                self.after(self.given)
+
+    def _ask(self, parts, schema=None):
+        self.asked.append(parts[0]["text"])
+        return "Plainly said instead."
+
+
+def _live(monkeyed):
+    """Point chat at a given backend, with the pipeline switched on."""
+    from src import models
+    cfg.config.PIPELINE = "gemini"
+    was = models.backend_for
+    models.backend_for = lambda name=None: monkeyed
+    return was
+
+
+def _restore(was):
+    from src import models
+    models.backend_for = was
+    cfg.config.PIPELINE = "stub"
+
+
+def test_an_answer_arrives_in_pieces_and_is_stored_whole():
+    from src import chat
+    thread = chat.start("streaming")
+    backend = Streamer()
+    was = _live(backend)
+    try:
+        taken = chat.take(thread, "why pull-ups?")
+        events = list(chat.reply(thread, taken["plan"]))
+    finally:
+        _restore(was)
+    deltas = [e["delta"] for e in events if "delta" in e]
+    done = [e["done"] for e in events if "done" in e]
+    assert len(deltas) > 1, "it came in one lump"
+    assert len(done) == 1, "exactly one done, always"
+    assert "".join(deltas) == "Use 4.7k pull-ups on both lines."
+    assert done[0]["reply"] == "Use 4.7k pull-ups on both lines."
+    assert chat.thread(thread)["messages"][-1]["body"] == done[0]["reply"]
+
+
+def test_stopping_keeps_what_had_already_arrived():
+    """He presses stop when he has what he needed. Throwing the answer away at
+    that moment would make the button useless."""
+    from src import chat
+    thread = chat.start("stopping")
+    backend = Streamer(after=lambda n: chat.ask_to_stop(thread) if n == 3 else None)
+    was = _live(backend)
+    try:
+        taken = chat.take(thread, "why pull-ups?")
+        events = list(chat.reply(thread, taken["plan"]))
+    finally:
+        _restore(was)
+    done = [e["done"] for e in events if "done" in e][0]
+    assert done["stopped"] is True
+    # One chunk more than he asked for, because the flag is read between chunks
+    # and the model was already mid-word. That is the guarantee: within a chunk,
+    # not instantly, and it stops rather than running to the end.
+    assert done["reply"] == "Use 4.7k pull-ups on"
+    assert backend.given == 4, "it kept generating long after being told to stop"
+    stored = chat.thread(thread)["messages"][-1]
+    assert stored["body"] == "Use 4.7k pull-ups on"
+    assert stored["stopped"] == 1
+
+
+def test_a_stopped_answer_is_marked_so_the_model_does_not_finish_the_sentence():
+    """A fragment read back as a finished thought is how the next answer carries
+    on from a claim nobody completed."""
+    from src import chat
+    line = chat._transcript([{"role": "enygma", "body": "Use 4.7k pull-ups",
+                              "stopped": True}])
+    assert "stopped you here" in line
+    plain = chat._transcript([{"role": "enygma", "body": "Use 4.7k", "stopped": False}])
+    assert "stopped you here" not in plain
+
+
+def test_stopping_before_it_said_anything_stores_nothing():
+    """An empty bubble in the thread is worse than no bubble."""
+    from src import chat
+    thread = chat.start("stopped at once")
+    backend = Streamer()
+    was = _live(backend)
+    try:
+        taken = chat.take(thread, "why pull-ups?")
+        # Pressed while the server was still accepting the message, before a
+        # single token existed. The browser cannot know how far it has got.
+        chat.ask_to_stop(thread)
+        events = list(chat.reply(thread, taken["plan"]))
+    finally:
+        _restore(was)
+    done = [e["done"] for e in events if "done" in e][0]
+    assert done["stopped"] is True and done.get("empty") is True
+    roles = [m["role"] for m in chat.thread(thread)["messages"]]
+    assert roles == ["operator"], "an empty answer was stored anyway"
+
+
+def test_a_stopped_answer_is_not_rewritten_for_its_voice():
+    """The rewrite exists to catch a model that ignored the prompt. A fragment
+    he cut off mid-sentence has not ignored anything, and asking again would
+    spend a second call to rewrite half a thought."""
+    from src import chat
+    thread = chat.start("no rewrite")
+    backend = Streamer(text="We leveraged the robust pipeline here",
+                       after=lambda n: chat.ask_to_stop(thread) if n == 3 else None)
+    was = _live(backend)
+    try:
+        taken = chat.take(thread, "how did it go?")
+        list(chat.reply(thread, taken["plan"]))
+    finally:
+        _restore(was)
+    assert len(backend.asked) == 1, "it asked again about an answer he stopped"
+
+
+def test_a_finished_answer_that_reads_like_a_machine_is_replaced_in_place():
+    """It cannot be streamed -- the first attempt is already on screen -- so the
+    rewrite arrives whole and takes its place."""
+    from src import chat
+    thread = chat.start("rewritten")
+    backend = Streamer(text="We leveraged the robust pipeline here.")
+    was = _live(backend)
+    try:
+        taken = chat.take(thread, "how did it go?")
+        events = list(chat.reply(thread, taken["plan"]))
+    finally:
+        _restore(was)
+    swapped = [e["replace"] for e in events if "replace" in e]
+    assert swapped == ["Plainly said instead."]
+    assert chat.thread(thread)["messages"][-1]["body"] == "Plainly said instead."
+
+
+def test_his_message_is_saved_before_a_single_byte_is_streamed():
+    """If the connection dies halfway through the answer, what he typed is still
+    his and still there."""
+    from src import chat
+    thread = chat.start("saved first")
+    was = _live(Streamer())
+    try:
+        chat.take(thread, "why pull-ups?")
+        assert [m["body"] for m in chat.thread(thread)["messages"]] == ["why pull-ups?"]
+    finally:
+        _restore(was)
+
+
+def test_abandoning_the_stream_still_keeps_what_the_model_said():
+    """He closed the tab, the phone slept, the tunnel dropped. Nothing reached a
+    yield after that, so without the fallback the answer would be lost -- and it
+    really was said."""
+    from src import chat
+    thread = chat.start("abandoned")
+    was = _live(Streamer())
+    try:
+        taken = chat.take(thread, "why pull-ups?")
+        stream = chat.reply(thread, taken["plan"])
+        next(stream); next(stream)
+        stream.close()
+    finally:
+        _restore(was)
+    stored = chat.thread(thread)["messages"][-1]
+    assert stored["role"] == "enygma"
+    assert stored["body"] == "Use 4.7k"
+    assert stored["stopped"] == 1
+
+
+def test_the_stop_flag_never_leaks_into_the_next_turn():
+    """A flag left set would stop the following answer after one word, which
+    would look like the model breaking rather than a stale bit of state."""
+    from src import chat
+    thread = chat.start("no leak")
+    backend = Streamer(after=lambda n: chat.ask_to_stop(thread) if n == 2 else None)
+    was = _live(backend)
+    try:
+        list(chat.reply(thread, chat.take(thread, "why pull-ups?")["plan"]))
+        assert not chat.stop_wanted(thread)
+        after = Streamer()
+        from src import models
+        models.backend_for = lambda name=None: after
+        events = list(chat.reply(thread, chat.take(thread, "and the timing?")["plan"]))
+    finally:
+        _restore(was)
+    assert [e["done"] for e in events if "done" in e][0]["stopped"] is False
+
+
+def test_the_browser_cannot_swallow_the_stop_press():
+    """A scar, and one only a browser could have found.
+
+    The box is cleared the moment he presses Send. The same button is Stop while
+    the answer writes itself. So when he pressed Stop, the browser ran its own
+    validation on an empty required field, refused the submit, and showed
+    "Please fill out this field" -- the handler never ran, the answer carried on,
+    and the stop button did nothing at all. Every test passed.
+    """
+    page = (pathlib.Path(__file__).resolve().parent.parent
+            / "src/templates/chat.html").read_text()
+    form = page[page.index('id="say"') - 200:page.index('id="say"') + 400]
+    assert "novalidate" in form, "the browser will refuse the stop press again"
+    assert "required" not in form, "an empty box blocks the button that stops"
+
+
+def test_send_and_stop_are_one_button():
+    """Two controls would be one more target to find on a folding phone, and
+    every chat he has used puts Stop where Send was."""
+    page = (pathlib.Path(__file__).resolve().parent.parent
+            / "src/templates/chat.html").read_text()
+    assert page.count('type="submit"') == 1
+    js = (pathlib.Path(__file__).resolve().parent.parent
+          / "src/static/js/app.js").read_text()
+    chat_block = js[js.index("-------- chat */"):js.index("------- settings */")]
+    assert 'sendBtn.setAttribute("aria-label", on ? "Stop" : "Send")' in chat_block, \
+        "the button changes face without telling a screen reader"
+
+
+def test_a_stream_is_written_as_text_never_as_markup():
+    """It is model output going onto the page a character at a time. It goes on
+    the same way a stored turn does."""
+    js = (pathlib.Path(__file__).resolve().parent.parent
+          / "src/static/js/app.js").read_text()
+    chat_block = js[js.index("-------- chat */"):js.index("------- settings */")]
+    put = chat_block[chat_block.index("const put = (piece)"):]
+    put = put[:put.index("};")]
+    assert "textContent" in put and "innerHTML" not in put

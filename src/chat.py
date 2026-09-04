@@ -46,13 +46,18 @@ def start(title: str, seed_term: str | None = None,
         return conn.execute("SELECT last_insert_rowid() AS id").fetchone()["id"]
 
 
-def _append(thread_id: int, role: str, body: str, transient: bool = False) -> None:
+def _append(thread_id: int, role: str, body: str, transient: bool = False,
+            stopped: bool = False) -> int:
     with cursor() as conn:
-        conn.execute("INSERT INTO chat_messages (thread_id, role, body, transient) "
-                     "VALUES (?, ?, ?, ?)",
-                     (thread_id, role, body, 1 if transient else 0))
+        conn.execute("INSERT INTO chat_messages "
+                     "  (thread_id, role, body, transient, stopped) "
+                     "VALUES (?, ?, ?, ?, ?)",
+                     (thread_id, role, body, 1 if transient else 0,
+                      1 if stopped else 0))
+        mine = conn.execute("SELECT last_insert_rowid() AS id").fetchone()["id"]
         conn.execute("UPDATE chat_threads SET updated_at = datetime('now') WHERE id = ?",
                      (thread_id,))
+    return mine
 
 
 # A resend of the same sentence inside this many seconds is a double-press, not
@@ -63,14 +68,85 @@ DUPLICATE_SECONDS = 20
 
 
 def say(thread_id: int, body: str) -> dict:
-    """One turn. His message in, one reply out."""
+    """One turn, start to finish, with nothing streamed.
+
+    Chat itself streams. This is the same machinery with the pieces glued back
+    together, and it exists so there is exactly one path: every test of what a
+    turn does is a test of what the streaming code does, rather than of a second
+    implementation that agreed with it on the day it was written.
+    """
+    taken = take(thread_id, body)
+    if "settled" in taken:
+        return taken["settled"]
+    out: dict = {"reply": ""}
+    for event in reply(thread_id, taken["plan"]):
+        if "done" in event:
+            out = {"reply": event["done"]["reply"]}
+            if event["done"].get("stopped"):
+                out["stopped"] = True
+    return out
+
+
+# --------------------------------------------------------------- streaming
+#
+# Chat used to be one blocking request per turn: he pressed send, the page sat
+# still for however long the model took, and then reloaded with the whole answer
+# at once. On the local model that is often thirty seconds of a screen doing
+# nothing, and there was no way to say "that is enough, stop".
+#
+# So the answer arrives a piece at a time and Send becomes Stop while it does.
+#
+# Stopping is a flag rather than a dropped connection. The obvious way is for
+# the browser to abort the request and the server to notice, but "notice" there
+# means relying on how the ASGI server unwinds a generator that is mid-iteration
+# in a thread pool, which is neither guaranteed nor testable without a browser.
+# A flag the server checks between chunks is deterministic, works the same in a
+# test as on his phone, and -- the part that decides it -- means the SERVER
+# still owns the text. It writes down what it generated. It never takes the
+# browser's word for what the model said.
+
+_stopping: set[int] = set()
+
+
+def ask_to_stop(thread_id: int) -> None:
+    """He pressed Stop. Checked between chunks, so it lands within one token."""
+    _stopping.add(thread_id)
+
+
+def stop_wanted(thread_id: int) -> bool:
+    return thread_id in _stopping
+
+
+def forget_stop(thread_id: int) -> None:
+    _stopping.discard(thread_id)
+
+
+def take(thread_id: int, body: str) -> dict:
+    """Accept his message and work out what has to happen next.
+
+    Everything that does not involve waiting on a model happens here and is
+    finished before a single byte is streamed: the duplicate guard, his turn
+    going into the thread, the attachments being tied to it, the thread taking
+    its title. So if the connection dies halfway through the answer, what he
+    said is still saved and still his.
+
+    Returns either a settled reply, for the paths that never stream -- a repeat,
+    a document, no model at all -- or a plan for the streaming one.
+    """
     body = (body or "").strip()
     if not body:
         raise ValueError("Nothing to send")
+    # Cleared here rather than at the top of reply(). A Stop pressed while this
+    # is still running -- the browser does not know how far the server has got
+    # -- arrives before the stream begins, and clearing it there would swallow
+    # it and let the answer run on after he asked it not to.
+    forget_stop(thread_id)
     repeat = _recent_duplicate(thread_id, body)
     if repeat is not None:
-        return {"reply": repeat, "duplicate": True}
+        return {"settled": {"reply": repeat, "duplicate": True}}
+
     history = _history(thread_id)
+    caveat = _first_reply(thread_id)
     _append(thread_id, "operator", body)
     with cursor() as conn:
         mine = conn.execute(
@@ -78,29 +154,106 @@ def say(thread_id: int, body: str) -> dict:
             (thread_id,)).fetchone()
     # claim() returns what it just tied to this message, and that is what goes
     # to the model. Reading pending() again afterwards returns nothing, which is
-    # a bug that looks completely correct from the outside: the image is stored,
-    # tied to the right message and shown back on screen, and the model never
-    # saw it.
+    # a bug that looks completely correct from the outside.
     brought = attachments.claim(thread_id, mine["id"]) if mine else []
     _title_from_first(thread_id, body)
 
-    # He asked for a file. Give him a file, not a fenced code block he has to
-    # select by hand on a phone -- which is exactly what happened the first time
-    # he asked for one.
     wanted = documents.detect(body)
     if wanted:
         made, reply = _make_document(thread_id, body, wanted, history)
-        # A failure is shown to him but never taught to the model.
         _append(thread_id, "enygma", reply, transient=made is None)
-        return {"reply": reply, "made": made}
+        return {"settled": {"reply": reply, "made": made}}
 
-    reply = _answer(body, caveat=_first_reply(thread_id), history=history,
-                    model=model_of(thread_id), brought=brought)
-    # "I could not reach the model just now" is a fact about one second, not a
-    # standing property of the app, and must not become part of what it knows.
-    _append(thread_id, "enygma", reply,
-            transient=reply.startswith("I could not reach the model"))
-    return {"reply": reply}
+    return {"plan": {"question": body, "history": history, "caveat": caveat,
+                     "model": model_of(thread_id), "brought": brought}}
+
+
+def reply(thread_id: int, plan: dict):
+    """The answer, a piece at a time.
+
+    Yields {"delta": text} as it arrives, then exactly one {"done": ...} saying
+    what was stored. A {"replace": text} in between means the whole answer was
+    rewritten -- see below.
+    """
+    made = _material(plan["question"], plan.get("caveat", True),
+                     plan.get("history"), plan.get("model"), plan.get("brought"))
+    if made["settled"] is not None:
+        _append(thread_id, "enygma", made["settled"])
+        yield {"delta": made["settled"]}
+        yield {"done": {"stopped": False, "reply": made["settled"]}}
+        return
+
+    choice = made["choice"]
+    got, saved, stopped = "", False, False
+    try:
+        backend = models.backend_for(choice)
+        if stop_wanted(thread_id):
+            # Pressed before a single token existed -- the browser cannot know
+            # how far the server has got. Checked before the call rather than
+            # inside the loop, so an answer he stopped at once is not paid for.
+            stopped = True
+        elif not hasattr(backend, "stream"):
+            # Gemini answers through its SDK, which this does not drive a token
+            # at a time. The answer arrives whole and Stop still works: it is
+            # thrown away rather than stored, which is what he meant by it.
+            whole = backend._ask(made["parts"], schema=None).strip()
+            if stop_wanted(thread_id):
+                stopped, got = True, ""
+            else:
+                got = whole
+                yield {"delta": whole}
+        else:
+            for piece in backend.stream(made["parts"]):
+                got += piece
+                yield {"delta": piece}
+                if stop_wanted(thread_id):
+                    stopped = True
+                    break
+        billed = _bill(backend, choice, "chat")
+
+        if not stopped:
+            # Asked once, then asked again naming exactly what was wrong. It
+            # cannot be streamed: the first answer is already on his screen, so
+            # the rewrite arrives whole and replaces it. Rare, and visible when
+            # it happens, which is better than him reading "leveraged" in
+            # something he is about to paste into Slack.
+            wrong = voice.complaints(voice.prose_lines(got))
+            if wrong:
+                again = backend._ask(
+                    [{"type": "text", "text": made["prompt"] + _say_again(wrong)}],
+                    schema=None).strip()
+                billed = _merge(billed, _bill(backend, choice, "chat"))
+                if again and len(voice.complaints(voice.prose_lines(again))) < len(wrong):
+                    got = again
+                    yield {"replace": got}
+
+        text = voice.tidy_markdown(got).strip()
+        if stopped and not text:
+            # He stopped it before it said anything, or while it was still
+            # thinking. Nothing is better than an empty bubble.
+            yield {"done": {"stopped": True, "reply": "", "empty": True}}
+            saved = True
+            return
+        tail = "" if stopped else _tail(made["found"], billed)
+        _append(thread_id, "enygma", text + tail, stopped=stopped)
+        saved = True
+        yield {"done": {"stopped": stopped, "reply": text + tail}}
+    except Exception as exc:
+        said = _failed(made["hit"], choice, exc)
+        # "I could not reach the model just now" is a fact about one second, not
+        # a standing property of the app, and must not become part of what it
+        # knows.
+        _append(thread_id, "enygma", said, transient=True)
+        saved = True
+        yield {"done": {"stopped": False, "reply": said, "failed": True}}
+    finally:
+        # He closed the tab, the phone slept, the tunnel dropped. The generator
+        # is closed under us and nothing above ever reached its yield, so what
+        # the model had already said would be lost. It was really said; keep it.
+        if not saved and got.strip():
+            _append(thread_id, "enygma", voice.tidy_markdown(got).strip(),
+                    stopped=True)
+        forget_stop(thread_id)
 
 
 def _make_document(thread_id: int, body: str, fmt: str,
@@ -148,10 +301,11 @@ def _history(thread_id: int, turns: int = 12) -> list[dict]:
     """What has already been said, oldest first, most recent turns only."""
     with cursor() as conn:
         rows = conn.execute(
-            "SELECT role, body FROM chat_messages WHERE thread_id = ? "
+            "SELECT role, body, stopped FROM chat_messages WHERE thread_id = ? "
             "  AND transient = 0 "
             "ORDER BY id DESC LIMIT ?", (thread_id, turns)).fetchall()
-    return [{"role": r["role"], "body": r["body"]} for r in reversed(rows)]
+    return [{"role": r["role"], "body": r["body"],
+             "stopped": bool(r["stopped"])} for r in reversed(rows)]
 
 
 def _title_from_first(thread_id: int, body: str) -> None:
@@ -178,7 +332,13 @@ def _transcript(history: list[dict]) -> str:
     lines = []
     for turn in history:
         who = "Operator" if turn["role"] == "operator" else "ENYGMA"
-        lines.append(f"{who}: {turn['body']}")
+        said = turn["body"]
+        if turn.get("stopped"):
+            # Otherwise a sentence that stops in the middle is read as a
+            # finished thought and the next answer carries on from a claim
+            # nobody actually completed.
+            said += " [he stopped you here, so this was never finished]"
+        lines.append(f"{who}: {said}")
     return "\n\n".join(lines)
 
 
@@ -200,107 +360,148 @@ def set_model(thread_id: int, name: str) -> str:
     return chosen
 
 
-def _answer(question: str, caveat: bool = True,
-            history: list[dict] | None = None,
-            model: str | None = None,
-            brought: list[dict] | None = None) -> str:
+VOICE = (
+    "You are ENYGMA, answering an engineering intern in an ongoing "
+    "conversation. Be direct and concrete. Three short paragraphs at "
+    "most. If you are not sure, say so.\n\n"
+    "He puts what you write in front of people at work, so it must not "
+    "read as though a machine wrote it. Plain words. Short sentences. "
+    "No emoji, no em dashes. Do not open a bullet with a bolded label "
+    "and a colon; write the sentence. Do not introduce your answer "
+    "before giving it and do not summarise it afterwards. Never use: "
+    "leverage, utilise, delve, streamline, robust, seamless, "
+    "facilitate, holistic, actionable, deep dive, moving forward, "
+    "key learnings, best practices, in conclusion, in summary, "
+    "it is important to note, I hope this helps.\n"
+    "Technical words are not the problem and must not be avoided. I2C, "
+    "MOSFET, pull-up resistor and the rest are the substance. Cut the "
+    "management vocabulary, never the engineering."
+)
+
+
+def _no_model(hit, found, caveat: bool) -> str:
+    """What is actually known, and from where. No invention."""
+    parts = []
+    if hit:
+        parts.append(f"{hit['term']} \u2014 {hit['gloss']}")
+    if found["sources"]:
+        parts.append("From your library:\n\n" + found["text"])
+    if caveat:
+        parts.append(NO_MODEL)
+    return "\n\n".join(parts) if parts else (
+        NO_MODEL if caveat else "That is not in my glossary or your library.")
+
+
+def _material(question: str, caveat: bool = True,
+              history: list[dict] | None = None,
+              model: str | None = None,
+              brought: list[dict] | None = None) -> dict:
+    """Everything an answer is built from, before any model is touched.
+
+    Split out of `_answer` when Chat started streaming. The blocking path and
+    the streaming one must ask the same question of the same model with the same
+    library passages behind it, and the only way to be sure of that is for there
+    to be one place the question is built.
+    """
     hit = glossary.lookup(_probable_term(question))
     found = library.context_for(question)
-
     choice = models.resolve(model)
+
     # ENYGMA_PIPELINE=stub means the whole application runs with no key and no
     # network -- that is what it is for and how the interface got built before
     # the bill started. So it overrides the picker rather than sitting beside
     # it: in stub mode no choice reaches a model, including the local one.
     if config.PIPELINE != "gemini":
-        # No model: say what is actually known, and from where.
-        parts = []
-        if hit:
-            parts.append(f"{hit['term']} — {hit['gloss']}")
-        if found["sources"]:
-            parts.append("From your library:\n\n" + found["text"])
-        if caveat:
-            parts.append(NO_MODEL)
-        return "\n\n".join(parts) if parts else (
-            NO_MODEL if caveat else "That is not in my glossary or your library.")
+        return {"hit": hit, "found": found, "choice": choice,
+                "settled": _no_model(hit, found, caveat)}
+
+    prompt = VOICE
+    # Without this the thread had no memory: every turn was answered cold,
+    # so "what about the second one?" was unanswerable and the same sentence
+    # asked twice produced two unrelated essays instead of one thread.
+    if history:
+        prompt += (
+            "\n\nThe conversation so far, oldest first. Do not repeat "
+            "yourself; carry on from it, and read a short or elliptical "
+            "message as a follow-up to what was already said:\n\n"
+            + _transcript(history)
+        )
+    prompt += "\n\nOperator: " + question
+    if hit:
+        prompt += f"\n\nThe app's own glossary says: {hit['gloss']}"
+    if found["text"]:
+        prompt += (
+            "\n\nThese passages are from the operator's own library. Prefer "
+            "them over your general knowledge where they disagree, and say so "
+            "if they do not answer the question:\n\n" + found["text"]
+        )
+    parts, described = attachments.parts_for(brought or [])
+    if described:
+        prompt += (f"\n\nHe has attached {described}. Answer about what is "
+                   "actually there. If you cannot make something out, say so "
+                   "rather than guessing at it.")
+    return {"hit": hit, "found": found, "choice": choice, "settled": None,
+            "prompt": prompt, "parts": [{"type": "text", "text": prompt}] + parts}
+
+
+def _tail(found: dict, billed: dict | None) -> str:
+    """What goes after the answer, in the order he reads it.
+
+    The spend notice is said once per round number, after the answer, so it is
+    never the first thing he reads and never the thing he came for. The library
+    line is last, so a claim can be traced back to the document it came from.
+    """
+    out = ""
+    if billed and billed.get("step"):
+        out += spend.notice(billed["provider"], billed["step"], billed["total"])
+    if found["sources"]:
+        names = ", ".join(s["title"] for s in found["sources"])
+        out += f"\n\nDrawn from your library: {names}"
+    return out
+
+
+def _failed(hit, choice: str, exc: Exception) -> str:
+    # Named, because which model failed is the first thing he needs and the fix
+    # differs: ollama is a service on his own machine, the other two are
+    # somebody else's outage or a key.
+    base = f"{hit['term']}: {hit['gloss']}\n\n" if hit else ""
+    return base + (f"I could not reach {models.LABELS.get(choice, choice)} "
+                   f"just now: {exc}")
+
+
+def _answer(question: str, caveat: bool = True,
+            history: list[dict] | None = None,
+            model: str | None = None,
+            brought: list[dict] | None = None) -> str:
+    """One blocking call. Still what the tests, the stub and any caller without
+    a live connection use; Chat itself now streams."""
+    made = _material(question, caveat, history, model, brought)
+    if made["settled"] is not None:
+        return made["settled"]
+    choice = made["choice"]
     try:
         backend = models.backend_for(choice)
-        prompt = (
-            "You are ENYGMA, answering an engineering intern in an ongoing "
-            "conversation. Be direct and concrete. Three short paragraphs at "
-            "most. If you are not sure, say so.\n\n"
-            "He puts what you write in front of people at work, so it must not "
-            "read as though a machine wrote it. Plain words. Short sentences. "
-            "No emoji, no em dashes. Do not open a bullet with a bolded label "
-            "and a colon; write the sentence. Do not introduce your answer "
-            "before giving it and do not summarise it afterwards. Never use: "
-            "leverage, utilise, delve, streamline, robust, seamless, "
-            "facilitate, holistic, actionable, deep dive, moving forward, "
-            "key learnings, best practices, in conclusion, in summary, "
-            "it is important to note, I hope this helps.\n"
-            "Technical words are not the problem and must not be avoided. I2C, "
-            "MOSFET, pull-up resistor and the rest are the substance. Cut the "
-            "management vocabulary, never the engineering."
-        )
-        # Without this the thread had no memory: every turn was answered cold,
-        # so "what about the second one?" was unanswerable and the same sentence
-        # asked twice produced two unrelated essays instead of one thread.
-        if history:
-            prompt += (
-                "\n\nThe conversation so far, oldest first. Do not repeat "
-                "yourself; carry on from it, and read a short or elliptical "
-                "message as a follow-up to what was already said:\n\n"
-                + _transcript(history)
-            )
-        prompt += "\n\nOperator: " + question
-        if hit:
-            prompt += f"\n\nThe app's own glossary says: {hit['gloss']}"
-        if found["text"]:
-            prompt += (
-                "\n\nThese passages are from the operator's own library. Prefer "
-                "them over your general knowledge where they disagree, and say so "
-                "if they do not answer the question:\n\n" + found["text"]
-            )
-        parts, described = attachments.parts_for(brought or [])
-        if described:
-            prompt += (f"\n\nHe has attached {described}. Answer about what is "
-                       "actually there. If you cannot make something out, say so "
-                       "rather than guessing at it.")
-        answer = backend._ask([{"type": "text", "text": prompt}] + parts,
-                              schema=None).strip()
+        answer = backend._ask(made["parts"], schema=None).strip()
         billed = _bill(backend, choice, "chat")
 
         # Asked once, then asked again naming exactly what was wrong. Fenced
         # code is not read, so a semicolon in a shell command cannot trigger it.
         wrong = voice.complaints(voice.prose_lines(answer))
         if wrong:
-            again = backend._ask([{"type": "text", "text": prompt + (
-                "\n\nYour last answer had these in it: " + "; ".join(wrong) +
-                ". Say the same thing again without them. Keep every technical "
-                "term and every command exactly as it was.")}], schema=None).strip()
+            again = backend._ask([{"type": "text", "text": made["prompt"]
+                                   + _say_again(wrong)}], schema=None).strip()
             billed = _merge(billed, _bill(backend, choice, "chat"))
             if again and len(voice.complaints(voice.prose_lines(again))) < len(wrong):
                 answer = again
-        answer = voice.tidy_markdown(answer)
-
-        # Said once per round number, after the answer, so it is never the first
-        # thing he reads and never the thing he came for.
-        if billed and billed.get("step"):
-            answer += spend.notice(billed["provider"], billed["step"],
-                                   billed["total"])
-
-        if found["sources"]:
-            # Which documents were drawn on, so a claim can be traced.
-            names = ", ".join(s["title"] for s in found["sources"])
-            answer += f"\n\nDrawn from your library: {names}"
-        return answer
+        return voice.tidy_markdown(answer) + _tail(made["found"], billed)
     except Exception as exc:
-        base = f"{hit['term']}: {hit['gloss']}\n\n" if hit else ""
-        # Named, because which model failed is the first thing he needs and the
-        # fix differs: ollama is a service on his own machine, the other two are
-        # somebody else's outage or a key.
-        return base + (f"I could not reach {models.LABELS.get(choice, choice)} "
-                       f"just now: {exc}")
+        return _failed(made["hit"], choice, exc)
+
+
+def _say_again(wrong: list[str]) -> str:
+    return ("\n\nYour last answer had these in it: " + "; ".join(wrong) +
+            ". Say the same thing again without them. Keep every technical "
+            "term and every command exactly as it was.")
 
 
 def _bill(backend, choice: str, what: str) -> dict | None:

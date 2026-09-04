@@ -47,7 +47,25 @@ class _Handler(BaseHTTPRequestHandler):
             content = "<think>looking</think>The jumper is in the wrong column."
         else:
             content = "<think>weighing it</think>Use 4.7k pull-ups on both lines."
+        if body.get("stream"):
+            return self._ndjson(content)
         self._json(200, {"message": {"role": "assistant", "content": content}})
+
+    def _ndjson(self, content):
+        """The real wire format: one JSON object per line, split at awkward
+        places on purpose. A tag broken across two chunks is the case the
+        streaming filter exists for, so the fake must produce one."""
+        self.send_response(200)
+        self.send_header("content-type", "application/x-ndjson")
+        self.end_headers()
+        step = 7
+        for at in range(0, len(content), step):
+            self.wfile.write(json.dumps(
+                {"message": {"role": "assistant", "content": content[at:at + step]},
+                 "done": False}).encode() + b"\n")
+            self.wfile.flush()
+        self.wfile.write(json.dumps({"message": {"content": ""}, "done": True}).encode() + b"\n")
+        self.wfile.flush()
 
     def _json(self, code, payload):
         raw = json.dumps(payload).encode()
@@ -252,3 +270,109 @@ def test_a_stopped_ollama_does_not_hang_the_page():
     finally:
         c.config.OLLAMA_HOST = was
         models.forget_readiness()
+
+
+# ------------------------------------------------------------- streaming
+
+def test_the_local_model_streams_the_same_answer_it_would_have_said():
+    """Streaming must not become a second, differently-behaved client. Same
+    request shape, same answer, delivered in pieces."""
+    from src.pipeline.ollama import OllamaBackend
+    SEEN.clear()
+    pieces = list(OllamaBackend().stream([{"type": "text", "text": "Why pull-ups?"}]))
+    assert SEEN[-1]["stream"] is True
+    assert len(pieces) > 1, "it came in one lump, which is not streaming"
+    assert "".join(pieces) == "Use 4.7k pull-ups on both lines."
+
+
+def test_reasoning_is_stripped_out_of_a_stream_it_cannot_see_the_end_of():
+    """The fake cuts the content every seven characters, so <think> arrives in
+    two pieces. A filter that only looks at one chunk at a time shows him the
+    model's private reasoning."""
+    from src.pipeline.ollama import OllamaBackend
+    out = "".join(OllamaBackend().stream([{"type": "text", "text": "Why pull-ups?"}]))
+    assert "weighing" not in out and "<think" not in out
+
+
+def test_a_stream_that_stops_mid_thought_yields_nothing_rather_than_reasoning():
+    from src.pipeline.ollama import Unthink
+    filter_ = Unthink()
+    shown = "".join(filter_.feed(c) for c in ["The answer. <thi", "nk>now let me"])
+    assert filter_.close() == "", "the reasoning was flushed as if it were an answer"
+    assert shown == "The answer. "
+
+
+def test_a_lone_angle_bracket_is_not_held_back_forever():
+    """'a < b' is arithmetic, not the start of a tag, and it has to come out."""
+    from src.pipeline.ollama import Unthink
+    filter_ = Unthink()
+    assert filter_.feed("if a < b then") + filter_.close() == "if a < b then"
+
+
+def test_a_stream_that_is_never_read_to_the_end_closes_the_connection():
+    """What the stop button does: there is no cancel API, closing the socket is
+    the cancel. The generator must be safe to abandon."""
+    from src.pipeline.ollama import OllamaBackend
+    stream = OllamaBackend().stream([{"type": "text", "text": "Why pull-ups?"}])
+    assert next(stream)
+    stream.close()          # must not raise
+
+
+# ------------------------------------------------ the paid one, streaming
+
+class _Anthropic(BaseHTTPRequestHandler):
+    """Anthropic's server-sent events, in the shape the real one sends them:
+    usage split across message_start and message_delta, text in deltas."""
+
+    def log_message(self, *a):
+        pass
+
+    def do_POST(self):
+        json.loads(self.rfile.read(int(self.headers.get("content-length", 0))) or b"{}")
+        self.send_response(200)
+        self.send_header("content-type", "text/event-stream")
+        self.end_headers()
+        for event in (
+            {"type": "message_start", "message": {"usage": {"input_tokens": 812}}},
+            {"type": "content_block_delta", "delta": {"type": "text_delta",
+                                                      "text": "Use 4.7k "}},
+            {"type": "content_block_delta", "delta": {"type": "text_delta",
+                                                      "text": "pull-ups."}},
+            {"type": "message_delta", "usage": {"output_tokens": 64}},
+            {"type": "message_stop"},
+        ):
+            self.wfile.write(b"event: x\n data\n".replace(b" data\n", b""))
+            self.wfile.write(b"data: " + json.dumps(event).encode() + b"\n\n")
+            self.wfile.flush()
+
+
+def test_opus_streams_and_bills_what_it_actually_generated():
+    """Usage is read as it arrives, not at the end, so an answer he stops
+    halfway is still billed. Anthropic generated those tokens whether or not he
+    read them, and a stopped answer showing up as free would make the running
+    total on Home wrong in the direction that matters."""
+    from src.pipeline.anthropic import AnthropicBackend
+    server = HTTPServer(("127.0.0.1", 0), _Anthropic)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        backend = AnthropicBackend(api_key="k")
+        backend.API = f"http://127.0.0.1:{server.server_port}/v1/messages"
+        pieces = []
+        for piece in backend.stream([{"type": "text", "text": "why?"}]):
+            pieces.append(piece)
+            if len(pieces) == 1:
+                break               # stopped after the first chunk
+        assert pieces == ["Use 4.7k "]
+        assert backend.usage["input"] == 812, "the input tokens were never recorded"
+    finally:
+        server.shutdown()
+
+
+def test_the_streaming_and_blocking_calls_ask_for_the_same_thing():
+    """Two code paths to one API is two chances to drift. They share the body."""
+    from src.pipeline.anthropic import AnthropicBackend
+    backend = AnthropicBackend(api_key="k")
+    parts = [{"type": "text", "text": "why?"}]
+    assert backend._body(parts) == {k: v for k, v in
+                                    dict(backend._body(parts), stream=True).items()
+                                    if k != "stream"}

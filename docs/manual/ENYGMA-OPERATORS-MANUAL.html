@@ -1960,6 +1960,38 @@ ENYGMA_GEMINI_API_KEY=AIza...</code></pre>
     still learning the domain.
   </p>
 
+  <h2>Asking, and stopping</h2>
+  <p>
+    An answer in Chat arrives as it is written rather than all at once when it is
+    finished. On the local model that is the difference between a still screen
+    for thirty seconds and a first sentence in two.
+  </p>
+  <p>
+    While it writes, the send button is a stop button. Press it and the answer
+    stops where it is, and <em>what had already arrived is kept</em> — you
+    pressed it because you had what you needed, so throwing the answer away at
+    that moment would make the button pointless. The turn is marked
+    <em>You stopped this</em>, and the mark is not decoration: the next question
+    in that thread is answered with the whole conversation behind it, so the
+    model is told where it was cut off rather than reading half a sentence as a
+    finished thought and carrying on from a claim nobody completed.
+  </p>
+  <div class="callout note">
+    <span class="label">Note</span>
+    Stopping is a message to the server, not a dropped connection, so the server
+    keeps and stores what it actually generated. It never takes the browser's
+    word for what the model said. Local and Opus stream token by token; Gemini
+    answers through its SDK in one piece, so there Stop throws the answer away
+    rather than shortening it.
+  </div>
+  <p>
+    Stop is checked between chunks, so it lands within a word or two rather than
+    instantly. On Opus, tokens already generated are still billed — Anthropic
+    produced them whether or not you read them, and a stopped answer showing up
+    as free would make the running total on Home wrong in the direction that
+    matters.
+  </p>
+
   <h2>Getting something out</h2>
   <p>
     <strong>Copy as Markdown</strong> on any meeting puts the whole thing on the
@@ -2603,6 +2635,8 @@ still stuck on the humidity drift</pre>
     <tr><td>POST</td><td><code>/meetings/{id}/speaker</code></td><td>Write</td><td>Put a name on a label.</td></tr>
     <tr><td>POST</td><td><code>/actions/{id}/toggle</code></td><td>Write</td><td>Tick or untick.</td></tr>
     <tr><td>POST</td><td><code>/chat/new</code>, <code>/chat/from-term</code>, <code>/chat/{id}/say</code></td><td>Write</td><td>Start a thread, or one turn of it.</td></tr>
+    <tr><td>POST</td><td><code>/chat/{id}/stream</code></td><td>Write</td><td>One turn, as server-sent events. What the page uses; <code>/say</code> is the no-JavaScript fallback.</td></tr>
+    <tr><td>POST</td><td><code>/chat/{id}/stop</code></td><td>Write</td><td>Stop the answer being written. Keeps what has arrived.</td></tr>
     <tr><td>POST</td><td><code>/directory/{name}</code></td><td>Write</td><td>Role, org and note for a person.</td></tr>
     <tr><td>POST</td><td><code>/auth/pin/set</code>, <code>/auth/pin/clear</code></td><td>Write</td><td>Manage the PIN.</td></tr>
     <tr><td>POST</td><td><code>/auth/pairing/new</code></td><td>Write</td><td>Mint a setup code. Fresh session required.</td></tr>
@@ -2761,6 +2795,8 @@ still stuck on the humidity drift</pre>
         <td>Send no longer takes focus off the box, and the bar returns only once focus has genuinely left the composer.</td></tr>
     <tr><td>Enter sent the message. On a phone there is no Shift to hold, so the only key that starts a new line was the key that posted a half-finished sentence — four times, with nothing guarding a resend.</td>
         <td>Enter sends only where a Shift key exists. The composer is disabled while a request is in flight and the field is cleared before it leaves.</td></tr>
+    <tr><td>The send button became the stop button, and the box is cleared the moment a message goes. So pressing Stop ran the browser's own validation on an empty <code>required</code> field, which refused the submit and showed "Please fill out this field". The handler never ran, the answer carried on writing itself, and the button did nothing. Every test passed; only a browser could find it.</td>
+        <td>The form is <code>novalidate</code> and emptiness is checked in the handler. A test asserts both, and the flow is driven in a real browser on every change.</td></tr>
     <tr><td>Chat had no memory. Every turn was answered cold, so a follow-up had nothing to follow and the same question twice produced two unrelated essays.</td>
         <td>The last twelve turns go into the prompt, and the same words inside twenty seconds return what was already said.</td></tr>
     <tr><td>The installer ended by saying the pipeline was still the stub while its own environment report, four lines above, showed <code>gemini</code> and a key. The false half was the one written as an instruction.</td>
