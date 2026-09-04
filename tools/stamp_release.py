@@ -1,5 +1,7 @@
 """Write the release identity that the app reports and displays.
 
+Three things: two build artifacts, and the changelog entry that describes them.
+
 Two files, both build artifacts, both out of version control:
 
     VERSION   <commit>.<utc build stamp>   URL safe; busts asset caches and
@@ -10,6 +12,19 @@ The commit number comes from git, so "Mk II.7" means "built from the seventh
 commit". Pass --count to stamp from outside a checkout, which is what the
 release packaging does.
 
+It also fills in the mark on the newest changelog entry, if that entry is still
+marked UNRELEASED. Writing that number by hand looked fine and was wrong: the
+number is the commit count, so committing the entry changed the number the entry
+claimed, and the changelog quietly described a build that did not exist. An
+entry that already carries a mark is never renumbered, because a device that has
+been shown a release must not be shown it again under a new name.
+
+Run it AFTER committing, never before. The number is the commit count, so a
+stamp taken before the commit names the release one short and the changelog then
+describes a build nobody will ever run. The stamp dirties src/changelog.py by
+design; that change rides along in the next commit.
+
+    git commit ...
     python3 tools/stamp_release.py
     python3 tools/stamp_release.py --count 7
 """
@@ -55,10 +70,32 @@ def main() -> int:
         return 1
 
     built = datetime.now(timezone.utc).strftime("%Y.%m.%d.%H%M")
+    mark = f"Mk {SERIES}.{count}"
     (ROOT / "VERSION").write_text(f"{count}.{built}\n")
-    (ROOT / "MARK").write_text(f"Mk {SERIES}.{count}\n")
-    print(f"Mk {SERIES}.{count}   build {count}.{built}")
+    (ROOT / "MARK").write_text(f"{mark}\n")
+    named = name_the_release(mark)
+    print(f"{mark}   build {count}.{built}"
+          + (f"   changelog entry named {mark}" if named else ""))
     return 0
+
+
+def name_the_release(mark: str) -> bool:
+    """Give the newest changelog entry its number, once.
+
+    Returns whether anything was written, so a re-stamp of an already-named
+    release is silent rather than pretending to have done something.
+    """
+    source = ROOT / "src" / "changelog.py"
+    if not source.exists():
+        return False
+    text = source.read_text()
+    # Only the first, and only if it is a placeholder. Everything already
+    # numbered stays as it is.
+    placeholder = '"mark": UNRELEASED,'
+    if placeholder not in text:
+        return False
+    source.write_text(text.replace(placeholder, f'"mark": "{mark}",', 1))
+    return True
 
 
 if __name__ == "__main__":

@@ -125,3 +125,70 @@ def test_the_mark_in_the_opening_is_the_mark():
     cells = macro[macro.index('aria-label="ENYGMA"'):macro.index("</div>")]
     voids = {n for n, piece in enumerate(cells.split("<i")[1:]) if "void" in piece}
     assert voids == {0, 6, 9, 15}, f"the app's mark has voids at {voids}"
+
+
+# --------------------------------------------- the number is not written by hand
+
+def test_a_new_entry_is_numbered_by_the_stamper_not_by_a_person():
+    """Writing it by hand looked fine and was wrong. The number is the commit
+    count, so committing the changelog entry changed the number the entry
+    claimed, and the changelog quietly described a build that never existed."""
+    import shutil, subprocess
+    work = pathlib.Path(tempfile.mkdtemp())
+    (work / "src").mkdir()
+    (work / "tools").mkdir()
+    shutil.copy(ROOT / "src/changelog.py", work / "src/changelog.py")
+    shutil.copy(ROOT / "tools/stamp_release.py", work / "tools/stamp_release.py")
+
+    # A fresh entry, the way one is written.
+    text = (work / "src/changelog.py").read_text()
+    text = text.replace("RELEASES = [\n    {\n",
+                        'RELEASES = [\n    {\n        "mark": UNRELEASED,\n'
+                        '        "date": "2026-09-09",\n'
+                        '        "headline": "Something new",\n'
+                        '        "items": ["It does a thing now."],\n    },\n    {\n', 1)
+    (work / "src/changelog.py").write_text(text)
+
+    out = subprocess.run([sys.executable, str(work / "tools/stamp_release.py"),
+                          "--count", "77"], capture_output=True, text=True)
+    assert out.returncode == 0, out.stderr
+    after = (work / "src/changelog.py").read_text()
+    assert '"mark": "Mk II.77",' in after, out.stdout
+    assert (work / "MARK").read_text().strip() == "Mk II.77"
+
+
+def test_a_release_that_already_has_a_number_is_never_renumbered():
+    """A device that has been shown a release must not be shown it again under a
+    new name."""
+    import shutil, subprocess
+    work = pathlib.Path(tempfile.mkdtemp())
+    (work / "src").mkdir(); (work / "tools").mkdir()
+    shutil.copy(ROOT / "src/changelog.py", work / "src/changelog.py")
+    shutil.copy(ROOT / "tools/stamp_release.py", work / "tools/stamp_release.py")
+
+    subprocess.run([sys.executable, str(work / "tools/stamp_release.py"),
+                    "--count", "40"], capture_output=True, text=True)
+    once = (work / "src/changelog.py").read_text()
+    subprocess.run([sys.executable, str(work / "tools/stamp_release.py"),
+                    "--count", "41"], capture_output=True, text=True)
+    twice = (work / "src/changelog.py").read_text()
+    assert once == twice, "a second stamp renumbered a release that had shipped"
+
+
+def test_nothing_unreleased_survives_into_a_build():
+    """A packaged build always has a stamped changelog, because packaging stamps
+    it. An UNRELEASED mark reaching a device would show up as a release with no
+    name."""
+    from src import changelog
+    if (ROOT / "MARK").exists():
+        assert changelog.RELEASES[0]["mark"] != changelog.UNRELEASED, \
+            "run tools/stamp_release.py"
+
+
+def test_the_newest_entry_describes_the_build_that_is_stamped():
+    """The whole point of moving the number out of a person's hands."""
+    from src import changelog
+    stamped = (ROOT / "MARK")
+    if not stamped.exists():
+        return
+    assert changelog.latest() == stamped.read_text().strip()

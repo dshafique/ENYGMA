@@ -13,14 +13,23 @@ different documents even when they describe the same change.
 Rules for entries: what he can now do, in his words, in one line. Not what was
 refactored, not what was fixed unless he felt it, and never more than five lines
 for a release. A changelog nobody finishes is a changelog nobody reads.
+
+The mark on a new entry is written as UNRELEASED and filled in by
+tools/stamp_release.py at the moment the build number is decided. Writing it by
+hand looked fine and was wrong: the number comes from the commit count, so the
+very act of committing the changelog entry changed the number the entry claimed.
+Once a mark has been assigned it is never rewritten, because a device that has
+already been shown a release must not be shown it again under a new number.
 """
 from __future__ import annotations
 
 # Newest first. `mark` matches the build stamp so a device can tell what it has
 # already been shown.
+UNRELEASED = "UNRELEASED"
+
 RELEASES = [
     {
-        "mark": "Mk II.29",
+        "mark": UNRELEASED,
         "date": "2026-09-04",
         "headline": "The bench, and a say in who answers",
         "items": [
@@ -57,6 +66,12 @@ RELEASES = [
 ]
 
 
+def released() -> list[dict]:
+    """Everything that has actually been stamped. An entry still marked
+    UNRELEASED is one being written, and has no number to compare against."""
+    return [r for r in RELEASES if r["mark"] != UNRELEASED]
+
+
 def since(mark: str | None) -> list[dict]:
     """Everything newer than the build this device last saw.
 
@@ -67,11 +82,13 @@ def since(mark: str | None) -> list[dict]:
     """
     if not mark:
         return []
-    known = [r["mark"] for r in RELEASES]
+    out = released()
+    known = [r["mark"] for r in out]
     if mark not in known:
         return []
-    return RELEASES[:known.index(mark)]
+    return out[:known.index(mark)]
 
 
 def latest() -> str:
-    return RELEASES[0]["mark"] if RELEASES else ""
+    out = released()
+    return out[0]["mark"] if out else ""
