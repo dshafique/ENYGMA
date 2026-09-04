@@ -56,8 +56,19 @@ def create(brief: str, fmt: str, *, context: str = "", thread_id: int | None = N
     """Make one document, keep it, and hand back the row."""
     if fmt not in documents.FORMATS:
         raise ValueError(f"{fmt!r} is not a format ENYGMA can write.")
+    from . import spend
+    from .pipeline.gemini import GeminiBackend
+    backend = backend or GeminiBackend()
     doc = documents.compose(brief, context, backend=backend,
                             fallback_title=fallback_title)
+    # Billed here rather than inside compose, because compose can call twice
+    # when the voice rules send it back and the caller should pay for both.
+    usage = getattr(backend, "usage", None) or {}
+    if usage.get("input") or usage.get("output"):
+        provider = "anthropic" if getattr(backend, "name", "") == "opus" else "google"
+        spend.record(provider, getattr(backend, "model", "?"), "document",
+                     usage.get("input", 0), usage.get("output", 0),
+                     thread_id=thread_id)
     data = documents.render(doc, fmt, style)
     name = documents.filename(doc, fmt)
     path, digest = _store(data, fmt)

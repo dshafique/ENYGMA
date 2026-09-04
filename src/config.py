@@ -124,6 +124,10 @@ class Config:
 
     # Which model a new chat thread starts on.
     CHAT_DEFAULT = os.environ.get("ENYGMA_CHAT_DEFAULT", "local")
+    # Say something every time the month's paid spend passes another round
+    # number. Zero turns it off. He cannot see the bill until it arrives, and by
+    # then it is spent.
+    SPEND_STEP_DOLLARS = int(os.environ.get("ENYGMA_SPEND_STEP_DOLLARS", "10"))
     ANTHROPIC_API_KEY = os.environ.get("ENYGMA_ANTHROPIC_API_KEY", "").strip()
     ANTHROPIC_MODEL = os.environ.get("ENYGMA_ANTHROPIC_MODEL", "claude-opus-4-5")
 

@@ -8,7 +8,7 @@ When no model is reachable the reply says so rather than inventing an answer. A
 glossary hit is still returned, because that is real knowledge the app has.
 """
 from .db import cursor
-from . import glossary, library, documents, voice, models, attachments
+from . import glossary, library, documents, voice, models, attachments, spend
 from .config import config
 
 NO_MODEL = (
@@ -268,6 +268,7 @@ def _answer(question: str, caveat: bool = True,
                        "rather than guessing at it.")
         answer = backend._ask([{"type": "text", "text": prompt}] + parts,
                               schema=None).strip()
+        billed = _bill(backend, choice, "chat")
 
         # Asked once, then asked again naming exactly what was wrong. Fenced
         # code is not read, so a semicolon in a shell command cannot trigger it.
@@ -277,9 +278,16 @@ def _answer(question: str, caveat: bool = True,
                 "\n\nYour last answer had these in it: " + "; ".join(wrong) +
                 ". Say the same thing again without them. Keep every technical "
                 "term and every command exactly as it was.")}], schema=None).strip()
+            billed = _merge(billed, _bill(backend, choice, "chat"))
             if again and len(voice.complaints(voice.prose_lines(again))) < len(wrong):
                 answer = again
         answer = voice.tidy_markdown(answer)
+
+        # Said once per round number, after the answer, so it is never the first
+        # thing he reads and never the thing he came for.
+        if billed and billed.get("step"):
+            answer += spend.notice(billed["provider"], billed["step"],
+                                   billed["total"])
 
         if found["sources"]:
             # Which documents were drawn on, so a claim can be traced.
@@ -293,6 +301,37 @@ def _answer(question: str, caveat: bool = True,
         # somebody else's outage or a key.
         return base + (f"I could not reach {models.LABELS.get(choice, choice)} "
                        f"just now: {exc}")
+
+
+def _bill(backend, choice: str, what: str) -> dict | None:
+    """Record what that call cost, if the backend knows.
+
+    Only the paid ones report usage, and only some of them. A backend that does
+    not is simply not billed rather than guessed at: an invented number in a
+    column labelled money is worse than an empty one.
+    """
+    provider = spend.PROVIDER_OF.get(choice)
+    usage = getattr(backend, "usage", None)
+    if not provider or not usage:
+        return None
+    if not (usage.get("input") or usage.get("output")):
+        return None
+    out = spend.record(provider, getattr(backend, "model", choice), what,
+                       usage.get("input", 0), usage.get("output", 0))
+    out["provider"] = provider
+    # Cleared, so a second call on the same backend object cannot be billed for
+    # the first one's tokens as well.
+    backend.usage = {"input": 0, "output": 0}
+    return out
+
+
+def _merge(first: dict | None, second: dict | None) -> dict | None:
+    """Two calls, one answer. The later total wins and either step counts."""
+    if not second:
+        return first
+    if not first:
+        return second
+    return dict(second, step=second.get("step") or first.get("step"))
 
 
 def _probable_term(question: str) -> str:

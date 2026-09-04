@@ -863,3 +863,13 @@ pre.doc {
                   padding: 0 var(--space-4); }
 .waiting-one .x:hover { color: var(--text); }
 .attach.busy { opacity: .5; pointer-events: none; }
+
+.spendtable { width: 100%; border-collapse: collapse; margin-bottom: var(--space-12); }
+.spendtable th { text-align: left; font-family: var(--font-mono); font-size: 10px;
+                 letter-spacing: .08em; text-transform: uppercase;
+                 color: var(--text-muted); font-weight: 500;
+                 padding-bottom: var(--space-6); }
+.spendtable td { font-size: 14px; color: var(--text-dim);
+                 padding: var(--space-6) 0;
+                 border-top: 1px solid var(--border-divider); }
+.spendtable td:not(:first-child), .spendtable th:not(:first-child) { text-align: right; }

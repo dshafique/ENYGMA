@@ -254,6 +254,9 @@ class GeminiBackend(Backend):
         self.model = config.GEMINI_MODEL
         # Set when the constrained request was refused and the plain one was used.
         self.degraded: str | None = None
+        # What the last call reported using. Zero until one has been made, so a
+        # caller asking before then bills nothing rather than crashing.
+        self.usage: dict = {"input": 0, "output": 0}
 
     def _get_client(self):
         if self._client is None:
@@ -292,12 +295,14 @@ class GeminiBackend(Backend):
                 "schema": schema,
             }
         try:
-            return client.interactions.create(**request).output_text
+            response = client.interactions.create(**request)
         except Exception as exc:
             if not _SHAPE_ERROR.search(str(exc)):
                 raise
             self.degraded = f"{type(exc).__name__}: {exc}"[:200]
-            return client.interactions.create(**minimum).output_text
+            response = client.interactions.create(**minimum)
+        self.usage = _usage_of(response)
+        return response.output_text
 
     def transcribe(self, audio_path, mime: str) -> Transcript:
         """Whole, or in windows if the recording outruns the diarization limit."""
@@ -484,3 +489,31 @@ def get_backend() -> Backend:
         return GeminiBackend()
     from .stub import StubBackend
     return StubBackend()
+
+
+def _usage_of(response) -> dict:
+    """Tokens, if the response says. Best effort on purpose.
+
+    The field has moved between versions of this SDK and it is not worth a hard
+    dependency: an uncounted call leaves the running total a little low, which
+    is honest, while a crash here would cost a transcription that already
+    happened and already cost money.
+    """
+    for name in ("usage_metadata", "usage"):
+        block = getattr(response, name, None)
+        if block is None:
+            continue
+        got = {}
+        for key, names in (
+            ("input", ("prompt_token_count", "input_tokens", "input_token_count")),
+            ("output", ("candidates_token_count", "output_tokens",
+                        "output_token_count")),
+        ):
+            for attribute in names:
+                value = getattr(block, attribute, None)
+                if isinstance(value, int):
+                    got[key] = value
+                    break
+        if got:
+            return {"input": got.get("input", 0), "output": got.get("output", 0)}
+    return {"input": 0, "output": 0}

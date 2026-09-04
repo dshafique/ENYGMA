@@ -26,6 +26,7 @@ from . import weeknote, documents
 from . import bench as bench_repo
 from . import models
 from . import attachments
+from . import spend
 from . import made as made_repo
 from . import (library, meetings as meetings_repo, actions as actions_repo,
                directory as directory_repo, chat as chat_repo, glossary,
@@ -571,6 +572,8 @@ def settings_page(request: Request):
     if current(request) is None:
         return RedirectResponse("/lock", status_code=302)
     return page(request, "settings.html", "settings", {
+        "spending": spend.summary(),
+        "step": config.SPEND_STEP_DOLLARS,
         "devices": passkeys.enrolled_devices(),
         "pipeline": config.PIPELINE,
         "model": config.GEMINI_MODEL,

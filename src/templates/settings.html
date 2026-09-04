@@ -59,6 +59,30 @@
     </p>
   </div>
 
+  <div class="card" style="margin-bottom:var(--space-16)">
+    <div class="card-head"><h2>This month</h2>
+      <span class="label">Estimated</span></div>
+    {% if spending %}
+    <table class="spendtable">
+      <tr><th>Model</th><th>Calls</th><th>Tokens</th><th>Cost</th></tr>
+      {% for row in spending %}
+      <tr><td>{{ row.name }}</td><td class="mono">{{ row.calls }}</td>
+          <td class="mono">{{ '{:,}'.format(row.input_tokens + row.output_tokens) }}</td>
+          <td class="mono">{{ row.money }}</td></tr>
+      {% endfor %}
+    </table>
+    <p class="dim" style="font-size:13px">
+      ENYGMA's own count, from the tokens each answer reported using. The real
+      figure is whoever's console the key belongs to, and a call that reports no
+      usage is left out rather than guessed at, so this reads a little low
+      rather than a little high. Local costs nothing and is never counted.{% if step %} You are told in a thread every time this passes
+      another ${{ step }}.{% endif %}</p>
+    {% else %}
+    <p class="dim" style="font-size:14px">Nothing paid for this month. Local
+       costs nothing, so a month on the local model stays empty here.</p>
+    {% endif %}
+  </div>
+
   <div class="card">
     <div class="card-head"><h2>Session</h2></div>
     <button class="btn line sm" id="lock" style="align-self:flex-start">Lock ENYGMA</button>
