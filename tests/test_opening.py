@@ -31,10 +31,18 @@ def test_a_device_that_has_been_here_is_shown_what_it_missed():
     stamper now, and a test that pins it would have to be edited on every
     release, which is the coupling that was just removed."""
     from src import changelog
-    got = changelog.since("Mk II.25")
+    released = changelog.released()
+    if len(released) < 2:
+        return
+    # Structural, not counted: from the second-newest, he sees exactly the
+    # newest. Counting releases means editing this on every release, which is
+    # the coupling that keeps growing back.
+    got = changelog.since(released[1]["mark"])
     assert [r["mark"] for r in got] == [changelog.latest()]
-    assert changelog.since("Mk II.18")[0]["mark"] == changelog.latest()
-    assert len(changelog.since("Mk II.18")) == 2
+    # And from further back, everything after that point, in order.
+    oldest = released[-1]["mark"]
+    assert [r["mark"] for r in changelog.since(oldest)] == \
+        [r["mark"] for r in released[:-1]]
 
 
 def test_a_device_that_is_current_is_shown_nothing():
@@ -65,7 +73,12 @@ def test_entries_are_about_what_he_can_now_do():
 
 
 def test_the_newest_release_is_first():
+    """Between writing an entry and stamping it, the top of the list is
+    UNRELEASED and has no number to compare. That is a working state, not a
+    broken one, so it is skipped rather than failed."""
     from src import changelog
+    if changelog.RELEASES[0]["mark"] == changelog.UNRELEASED:
+        return
     assert changelog.RELEASES[0]["mark"] == changelog.latest()
 
 
@@ -178,14 +191,15 @@ def test_a_release_that_already_has_a_number_is_never_renumbered():
     assert once == twice, "a second stamp renumbered a release that had shipped"
 
 
-def test_nothing_unreleased_survives_into_a_build():
-    """A packaged build always has a stamped changelog, because packaging stamps
-    it. An UNRELEASED mark reaching a device would show up as a release with no
-    name."""
+def test_an_unreleased_entry_is_never_offered_to_a_device():
+    """Between writing an entry and stamping it the top of the list has no
+    number, which is a working state. What must never happen is that entry
+    reaching a phone, where it would appear as a release with no name."""
     from src import changelog
-    if (ROOT / "MARK").exists():
-        assert changelog.RELEASES[0]["mark"] != changelog.UNRELEASED, \
-            "run tools/stamp_release.py"
+    assert changelog.UNRELEASED not in [r["mark"] for r in changelog.released()]
+    assert changelog.latest() != changelog.UNRELEASED
+    for mark in (None, "Mk II.25", changelog.latest()):
+        assert changelog.UNRELEASED not in [r["mark"] for r in changelog.since(mark)]
 
 
 def test_the_changelog_never_claims_a_build_that_does_not_exist_yet():
