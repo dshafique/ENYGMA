@@ -1,0 +1,17 @@
+{
+  "appId": "io.arkhm.enygma",
+  "appName": "ENYGMA",
+  "webDir": "www",
+  "server": {
+    "url": "https://enygma.arkhm.io",
+    "errorPath": "unreachable.html",
+    "cleartext": false,
+    "androidScheme": "https"
+  },
+  "android": {
+    "allowMixedContent": false,
+    "backgroundColor": "#0d0d0f",
+    "zoomEnabled": false,
+    "webContentsDebuggingEnabled": false
+  }
+}

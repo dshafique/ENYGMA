@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+import subprocess
 from pathlib import Path
 
 from ..config import config, BASE_DIR
@@ -28,6 +29,43 @@ def _title_from(filename: str) -> str:
     # A leading timestamp from a recorder is noise, not a title.
     stem = re.sub(r"^\d{4}[-_ ]?\d{2}[-_ ]?\d{2}[ T]*\d{0,6}\s*", "", stem).strip()
     return stem or "Untitled recording"
+
+
+def normalise(path: Path) -> tuple[Path, str]:
+    """Put a recorded container into one the transcription model reads.
+
+    A browser records Opus in a WebM container and gives no choice about it, so
+    the app's own record button produces a file Gemini will not take. WebM and
+    Ogg are both just containers around the same Opus stream, so this is a
+    remux, not a re-encode: `-c copy`, no quality lost, a second or two for an
+    hour of speech.
+
+    Without ffmpeg the file is kept as it is rather than thrown away. He would
+    rather have the audio and a failed transcription he can retry after
+    installing ffmpeg than lose the meeting.
+    """
+    suffix = path.suffix.lower()
+    if suffix not in config.REMUX_TO_OGG:
+        return path, config.ALLOWED_AUDIO[suffix]
+
+    from ..pipeline import chunking
+    if not chunking.have_ffmpeg():
+        return path, config.ALLOWED_AUDIO[suffix]
+
+    out = path.with_suffix(".ogg")
+    try:
+        subprocess.run(
+            ["ffmpeg", "-y", "-loglevel", "error", "-i", str(path),
+             "-c", "copy", str(out)],
+            check=True, capture_output=True, timeout=300)
+    except (subprocess.SubprocessError, OSError):
+        out.unlink(missing_ok=True)
+        return path, config.ALLOWED_AUDIO[suffix]
+    if not out.exists() or out.stat().st_size == 0:
+        out.unlink(missing_ok=True)
+        return path, config.ALLOWED_AUDIO[suffix]
+    path.unlink(missing_ok=True)
+    return out, config.ALLOWED_AUDIO[".ogg"]
 
 
 def check(filename: str, size_bytes: int | None = None) -> str:
@@ -67,6 +105,7 @@ def _write(filename: str, stream) -> tuple[Path, str, int, str]:
         sha = digest.hexdigest()
         final = UPLOADS / f"{sha[:16]}{suffix}"
         tmp.replace(final)
+        final, mime = normalise(final)
         return final, sha, total, mime
     finally:
         tmp.unlink(missing_ok=True)
@@ -147,6 +186,10 @@ def store(filename: str, stream) -> dict:
 
         final = UPLOADS / f"{sha[:16]}{suffix}"
         tmp.replace(final)
+        # The hash is of what he sent, not of what is on disk after this: dedupe
+        # has to answer "have I had this file before", and remuxing the same
+        # recording twice must not produce two meetings.
+        final, mime = normalise(final)
         title = _title_from(filename)
         with cursor() as conn:
             conn.execute(

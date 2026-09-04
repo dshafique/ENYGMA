@@ -29,6 +29,18 @@ UNRELEASED = "UNRELEASED"
 
 RELEASES = [
     {
+        "mark": "Mk II.39",
+        "date": "2026-09-04",
+        "headline": "Record a meeting from inside ENYGMA",
+        "items": [
+            "Meetings has a record button. Press it, put the phone down, press "
+            "stop, and it lands here as a meeting.",
+            "Pause and resume while it runs, or discard it without saving.",
+            "In the browser it records only while the page is open. The "
+            "installed app keeps going with the screen off.",
+        ],
+    },
+    {
         "mark": "Mk II.38",
         "date": "2026-09-04",
         "headline": "Answers arrive as they are written",

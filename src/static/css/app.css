@@ -1,6 +1,15 @@
 /* References only. No raw hex below this line. */
 * { box-sizing: border-box; }
 
+/* The `hidden` attribute is a display:none in the browser's own stylesheet, and
+   any class here that sets a display beats it -- author rules win over the user
+   agent's whatever the specificity. Every panel and control written with
+   `hidden` was therefore visible the moment it was styled, which reads as a
+   layout bug rather than a CSS one and passes every test that only asks whether
+   the markup is there. Said once, at the top, rather than guarded class by
+   class and forgotten on the next one. */
+[hidden] { display: none !important; }
+
 html, body { height: 100%; }
 
 body {
@@ -421,6 +430,43 @@ h3 { font-size: 15px; font-weight: 600; margin: 0; }
 @media (prefers-reduced-motion: reduce) { .bar i { animation: none; width: 100%; opacity: .4; } }
 
 /* ======================================================================
+   Recording
+
+   The primary way a meeting gets in, so it sits above the dropzone and reads
+   as the thing to do rather than an alternative to it.
+   ====================================================================== */
+.recorder { display: flex; flex-direction: column; gap: var(--space-16);
+            background: var(--surface); border: 1px solid var(--border-divider);
+            border-radius: var(--radius-lg); padding: var(--space-24); }
+.reclead h2 { margin: 0 0 var(--space-8); }
+.reclead .sub { margin: 0; }
+.recrow { display: flex; align-items: center; gap: var(--space-12); flex-wrap: wrap; }
+.recbtn { display: inline-flex; align-items: center; gap: var(--space-8); }
+.recbtn .dot { width: 9px; height: 9px; border-radius: 50%;
+               background: currentColor; flex: none; }
+.recorder.on .recbtn .dot { animation: recpulse 1.4s ease-in-out infinite; }
+.recorder.on.held .recbtn .dot { animation: none; opacity: .45; }
+@keyframes recpulse { 50% { opacity: .25; } }
+@media (prefers-reduced-motion: reduce) {
+  .recorder.on .recbtn .dot { animation: none; }
+}
+.rectime { font-size: 20px; letter-spacing: .04em; color: var(--text);
+           font-variant-numeric: tabular-nums; }
+
+/* "or" with a rule through it, so the dropzone reads as the second way in
+   rather than as an unrelated panel below. */
+.orline { display: flex; align-items: center; gap: var(--space-12);
+          margin: var(--space-20) 0; color: var(--text-muted);
+          font-family: var(--font-mono); font-size: 11px; letter-spacing: .1em;
+          text-transform: uppercase; }
+.orline::before, .orline::after {
+  content: ""; flex: 1; height: 1px; background: var(--border-divider); }
+
+@media (max-width: 599px) {
+  .recorder { padding: var(--space-16); }
+}
+
+/* ======================================================================
    Library
    ====================================================================== */
 .linefield, .card textarea {
@@ -464,7 +510,6 @@ h3 { font-size: 15px; font-weight: 600; margin: 0; }
 /* display:flex on a class beats the browser's own [hidden] rule, so the box
    opened itself the moment it was styled. Every collapsed panel in this file
    needs its own hidden rule for the same reason. */
-.wn-words-box[hidden] { display: none; }
 .wn-words-box { display: flex; flex-direction: column; gap: var(--space-8);
                 background: var(--surface); border: 1px solid var(--border-divider);
                 border-radius: var(--radius-lg); padding: var(--space-16); }
@@ -912,7 +957,6 @@ pre.doc {
 /* Same trap as .wn-words-box: display on a class beats the browser's own
    [hidden] rule, so with nothing attached this was still an empty flex row with
    8px of margin under it, sitting between the last answer and the composer. */
-.waiting[hidden] { display: none; }
 .waiting { display: flex; flex-wrap: wrap; gap: var(--space-6);
            max-width: var(--reading); margin: 0 auto var(--space-8); }
 .waiting-one { height: 28px; padding-right: var(--space-6); font-size: 12px;

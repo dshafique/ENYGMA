@@ -81,7 +81,15 @@ class Config:
         ".mp3": "audio/mpeg", ".wav": "audio/wav", ".m4a": "audio/mp4",
         ".aac": "audio/aac", ".ogg": "audio/ogg", ".flac": "audio/flac",
         ".aiff": "audio/aiff", ".aif": "audio/aiff",
+        # What a browser records. MediaRecorder on Android and on Chrome gives
+        # Opus in a WebM container and offers no say in the matter, so refusing
+        # it would mean refusing the app's own record button. It is remuxed to
+        # Ogg on the way in -- see ingest/upload.normalise -- because the
+        # transcription model reads Ogg and does not read WebM.
+        ".webm": "audio/webm",
     }
+    # Containers ENYGMA takes but does not hand onwards, and what each becomes.
+    REMUX_TO_OGG = (".webm",)
 
     # Pipeline. "stub" runs the whole app with no API key and no network, which is
     # how the interface gets built before the Gemini bill starts.

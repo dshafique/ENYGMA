@@ -50,7 +50,7 @@
         {% endfor %}
       {% else %}
         <div class="empty"><div class="cell"></div>
-          <p>Meetings appear here once you drop an audio file.</p></div>
+          <p>Meetings appear here once you record one or drop an audio file.</p></div>
       {% endif %}
       <p class="empty" id="nomatch" hidden>Nothing matches that.</p>
     </div>
@@ -68,6 +68,26 @@
              and a key to use the real one.</p>
         </div>
         {% endif %}
+
+        <div class="recorder" id="recorder">
+          <div class="reclead">
+            <h2>Record this meeting</h2>
+            <p class="sub">Press record, put the phone down, press stop. It lands
+               here as a meeting like any other. In a browser it keeps going only
+               while this page is open; in the installed app it keeps going with
+               the screen off.</p>
+          </div>
+          <div class="recrow">
+            <button class="btn recbtn" id="rec" type="button">
+              <span class="dot"></span><span class="recword">Record</span></button>
+            <span class="rectime mono" id="rectime" hidden>0:00</span>
+            <button class="btn line sm" id="recpause" type="button" hidden>Pause</button>
+            <button class="btn ghost sm" id="reccancel" type="button" hidden>Discard</button>
+            <span class="msg dim" id="recmsg"></span>
+          </div>
+        </div>
+
+        <p class="orline"><span>or</span></p>
 
         <label class="drop" id="drop">
           <input type="file" id="file" multiple accept="audio/*,.mp3,.wav,.m4a,.aac,.ogg,.flac,.aiff,.aif,.txt,.md,.markdown,.html,.htm,.pdf,.rst">

@@ -762,18 +762,26 @@ def test_every_page_that_shows_an_action_offers_the_same_four_states():
 
 
 def test_a_panel_that_starts_hidden_actually_stays_hidden():
-    """A scar. `.wn-words-box { display: flex }` is a class rule in the author
-    stylesheet, and the `hidden` attribute is a `display: none` in the browser's
-    own, so the flex won and the box opened itself the moment it was styled. It
+    """A scar, found twice. `.wn-words-box { display: flex }` is a class rule in
+    the author stylesheet and `hidden` is a `display: none` in the browser's own,
+    so the flex won and the box opened itself the moment it was styled. It
     rendered correctly in every test that only asked whether the markup was
-    there, which is how it got as far as a screenshot.
+    there, which is how it got as far as a screenshot. Generalising the test
+    immediately found `.waiting` doing the same thing in Chat, and then the
+    recorder's own timer and buttons.
 
-    Generalised: any class that sets a display and is worn by an element written
-    with `hidden` must also say what hidden looks like.
+    Three times is a rule, not a bug: the stylesheet now says it once at the
+    top. This test accepts that, and goes back to asking class by class if it is
+    ever removed.
     """
     import re
     root = pathlib.Path(__file__).resolve().parent.parent
     css = (root / "src/static/css/app.css").read_text()
+
+    # One rule at the top of the file covers every class at once. If it is ever
+    # removed, this falls back to asking about each class on its own.
+    if re.search(r"\[hidden\]\s*\{[^}]*display:\s*none\s*!important", css):
+        return
 
     displayed = {m.group(1) for m in
                  re.finditer(r"\.([a-z0-9-]+)\s*(?:,[^{]*)?\{[^}]*display:\s*(?!none)",
@@ -793,3 +801,100 @@ def test_a_panel_that_starts_hidden_actually_stays_hidden():
     assert not unguarded, (
         "these classes set a display and are worn by an element that starts "
         f"hidden, so hidden does nothing: {unguarded}")
+
+
+# ------------------------------------------------------------- the recorder
+
+def _chat_js() -> str:
+    root = pathlib.Path(__file__).resolve().parent.parent
+    js = (root / "src/static/js/app.js").read_text()
+    return js[js.index("----- recording */"):js.index("detail: tabs */")]
+
+
+def test_the_recorder_is_on_the_page_that_starts_a_meeting():
+    body = client(True).get("/meetings").text
+    assert 'id="recorder"' in body and 'id="rec"' in body
+
+
+def test_one_button_two_engines_chosen_at_runtime():
+    """MediaRecorder in a browser, the native plugin inside the shell. The rest
+    of the recorder must not be able to tell which one it got."""
+    block = _chat_js()
+    assert "isNativePlatform" in block, "it never asks whether it is in the shell"
+    assert "MediaRecorder" in block and "AudioRecorder" in block
+    for method in ("start()", "pause()", "resume()", "stop()", "cancel()"):
+        assert block.count(method) >= 2, f"{method} is not on both engines"
+
+
+def test_the_recording_dot_survives_the_button_changing_word():
+    """A scar. Writing "Stop" into the button with textContent took the pulsing
+    dot with it and it never came back, which reads as the recording having
+    stopped at the exact moment it started."""
+    block = _chat_js()
+    assert 'querySelector(".recword")' in block
+    assert "button.textContent =" not in block
+
+
+def test_leaving_the_page_mid_recording_is_not_silent():
+    """In a browser the recording dies with the page. Losing a meeting without a
+    word would be the worst failure this feature has."""
+    assert "beforeunload" in _chat_js()
+
+
+def test_a_refused_microphone_says_what_to_do():
+    block = _chat_js()
+    assert "NotAllowedError" in block
+    assert "Allow it for this site" in block
+
+
+def test_the_recording_goes_up_the_same_path_a_dropped_file_does():
+    """Two upload paths would be two sets of failure messages, and only one of
+    them would get fixed."""
+    js = (pathlib.Path(__file__).resolve().parent.parent
+          / "src/static/js/app.js").read_text()
+    assert "sendFiles = upload;" in js
+    assert "await sendFiles([file])" in js
+
+
+# --------------------------------------------------------- the native shell
+
+def _capacitor() -> dict:
+    import json as _json
+    root = pathlib.Path(__file__).resolve().parent.parent
+    return _json.loads((root / "native/capacitor/capacitor.config.json").read_text())
+
+
+def test_the_shell_loads_the_real_app_over_https():
+    """It is his brother's employer's meetings. Cleartext, a mixed-content
+    allowance or an http url would put them on the office wifi in the open."""
+    config = _capacitor()
+    assert config["server"]["url"].startswith("https://")
+    assert config["server"]["cleartext"] is False
+    assert config["android"]["allowMixedContent"] is False
+
+
+def test_the_shell_and_the_app_agree_on_the_address():
+    """A shell pointed at the wrong host is an app that works perfectly and
+    shows somebody else's data, or nothing."""
+    root = pathlib.Path(__file__).resolve().parent.parent
+    runbook = (root / "RUNBOOK.md").read_text()
+    assert _capacitor()["server"]["url"] == "https://enygma.arkhm.io"
+    assert "enygma.arkhm.io" in runbook
+
+
+def test_the_shell_has_somewhere_to_go_when_the_spark_is_down():
+    root = pathlib.Path(__file__).resolve().parent.parent
+    where = _capacitor()["server"]["errorPath"]
+    assert (root / "native/capacitor/www" / where).exists()
+
+
+def test_the_build_notes_say_the_two_things_cap_sync_cannot_do():
+    """Both are hand edits to AndroidManifest.xml, and forgetting either one is
+    a bug that only shows up on the phone: recording that dies with the screen,
+    or an app that still ignores his rotation lock."""
+    root = pathlib.Path(__file__).resolve().parent.parent
+    notes = (root / "native/capacitor/README.md").read_text()
+    assert 'foregroundServiceType="microphone"' in notes
+    assert 'android:screenOrientation="unspecified"' in notes
+    assert "FOREGROUND_SERVICE_MICROPHONE" in notes
+    assert "RECORD_AUDIO" in notes

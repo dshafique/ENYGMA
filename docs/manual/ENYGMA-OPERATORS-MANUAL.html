@@ -523,6 +523,7 @@ ol.toc-list li.ch .num {
     <li class="ch"><span class="num">19</span><span>The Friday note</span></li>
     <li class="ch"><span class="num">20</span><span>Documents</span></li>
     <li class="ch"><span class="num">21</span><span>How ENYGMA writes</span></li>
+    <li class="ch"><span class="num">22</span><span>The native shell</span></li>
 
 <li class="part">Appendices</li>
     <li class="ch"><span class="num">A</span><span>Environment variables</span></li>
@@ -1960,6 +1961,32 @@ ENYGMA_GEMINI_API_KEY=AIza...</code></pre>
     still learning the domain.
   </p>
 
+  <h2>Recording a meeting</h2>
+  <p>
+    <strong>Meetings</strong> has a record button above the drop zone. Press it,
+    put the phone down, press stop. What comes back lands as a meeting like any
+    other and goes straight into the pipeline. <em>Pause</em> holds it without
+    ending it; <em>Discard</em> throws it away and asks first.
+  </p>
+  <p>
+    There are two recorders behind that one button and the page picks between
+    them when it loads. In a browser it is the browser's own recorder, which
+    works and runs <strong>only while the page is open</strong> — the screen
+    going off or Android reclaiming the tab ends the recording, so leaving the
+    page warns you first. Inside the native shell (Chapter 23) it is a foreground
+    service with a notification, which Android will not kill, and the phone can
+    go in a pocket for an hour.
+  </p>
+  <div class="callout note">
+    <span class="label">Note</span>
+    A browser records Opus inside a WebM container and gives no say in the
+    matter, which is a format the transcription model does not read. ENYGMA
+    remuxes it to Ogg on the way in — the same audio in a different box, not a
+    re-encode, and about a second for an hour of speech. Without
+    <code>ffmpeg</code> on the host the file is kept as it is rather than thrown
+    away: better a recording that needs a retry than a meeting that is gone.
+  </div>
+
   <h2>Asking, and stopping</h2>
   <p>
     An answer in Chat arrives as it is written rather than all at once when it is
@@ -2289,6 +2316,7 @@ restored enygma-20260827-045126.db.gz
     <div><span class="ch">19</span><span>The Friday note</span></div>
     <div><span class="ch">20</span><span>Documents</span></div>
     <div><span class="ch">21</span><span>How ENYGMA writes</span></div>
+    <div><span class="ch">22</span><span>The native shell</span></div>
   </div>
 </section>
 
@@ -2547,6 +2575,75 @@ still stuck on the humidity drift</pre>
     <code>i2cdetect -y 1; make robust-build</code> neither loses its semicolon
     nor sends the whole answer back for a rewrite. Table rows are data too and
     keep their punctuation.
+  </p>
+</section>
+
+<section class="page body-page">
+  <h1 class="chapter">Chapter 22 &nbsp;|&nbsp; The native shell</h1>
+  <div class="chapter-meta"><span class="label">Part 6 · What it writes</span><span>22</span></div>
+
+  <p class="lede">
+    An Android app that loads the live ENYGMA from the Spark. The web app stays
+    the one source of truth and updates the moment you deploy; the shell exists
+    for the one thing a browser tab cannot do.
+  </p>
+
+  <h2>Why bother</h2>
+  <p>
+    Recording. In a browser the recorder runs only while the page is open: the
+    screen goes off, Android reclaims the tab, the meeting is gone. Inside the
+    shell the recording runs in a foreground service with an ongoing
+    notification, which Android will not kill, so the phone can go in a pocket
+    for an hour.
+  </p>
+  <p>
+    Second, orientation. Android bakes an orientation into an installed package
+    at install time, and a web manifest claiming <code>"orientation": "any"</code>
+    is an explicit "I handle every orientation" that overrides the phone's
+    rotation lock. In the shell that value is one line of
+    <code>AndroidManifest.xml</code> you control, set to
+    <code>unspecified</code>, which means <em>follow the phone</em>.
+  </p>
+
+  <h2>Where it lives</h2>
+  <p>
+    <code>native/capacitor/</code> in this repository, so the shell's
+    configuration and the web app it loads cannot drift apart. Its
+    <code>README.md</code> is the build procedure and is the file to read before
+    touching any of this. The generated <code>android/</code> directory is not
+    versioned: <code>npx cap add android</code> writes it in ten seconds from
+    the config that is.
+  </p>
+
+  <h2>The two hand edits</h2>
+  <p>
+    <code>cap sync</code> cannot make either of these, and forgetting one is a
+    bug that only appears on the phone.
+  </p>
+  <ul>
+    <li><code>android:foregroundServiceType="microphone"</code> on the service.
+      With the wrong type, Android 14 and up refuses to start it and the
+      recording quietly becomes an ordinary one that dies with the screen.</li>
+    <li><code>android:screenOrientation="unspecified"</code> on
+      <code>MainActivity</code>, plus the <code>RECORD_AUDIO</code>,
+      <code>FOREGROUND_SERVICE_MICROPHONE</code> and
+      <code>POST_NOTIFICATIONS</code> permissions.</li>
+  </ul>
+
+  <h2>What it is honest about</h2>
+  <p>
+    The shell runs on Capacitor's <code>server.url</code>, which Capacitor's own
+    documentation calls "not intended for use in production". That warning is
+    about app-store review and about losing offline behaviour. Neither binds
+    here: this is sideloaded onto one phone, and ENYGMA has never worked offline
+    because every page is rendered on the Spark. What it does mean is that when
+    the Spark or the tunnel is down, the app shows a single sentence saying so
+    rather than anything useful. That is the price of the web app being the one
+    source of truth, and it is worth paying.
+  </p>
+  <p>
+    It also changes nothing about the interface. Same HTML, same CSS, same
+    layout. A shell is a jacket, not a redesign.
   </p>
 </section>
 

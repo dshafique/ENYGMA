@@ -815,3 +815,87 @@ def test_a_meeting_that_already_has_audio_will_not_take_more():
         assert "already has a recording" in str(exc)
     with cursor() as conn:
         conn.execute("DELETE FROM recordings WHERE id = ?", (stored["id"],))
+
+
+# ---------------------------------------------------------- what he records
+#
+# Before this there was no recorder: catching a meeting meant the phone's voice
+# recorder, remembering to stop it, coming back here and finding the file in a
+# picker. Now there is a record button, and it produces a container the rest of
+# the pipeline had never seen.
+
+import shutil, subprocess
+
+
+def _opus_webm(path: pathlib.Path, seconds: int = 2) -> pathlib.Path:
+    """A real Opus-in-WebM file, the way a browser makes them."""
+    subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi",
+                    "-i", f"sine=frequency=300:duration={seconds}",
+                    "-c:a", "libopus", "-b:a", "32k", str(path)], check=True)
+    return path
+
+
+needs_ffmpeg = pytest.mark.skipif(not shutil.which("ffmpeg"),
+                                  reason="ffmpeg is not on this machine")
+
+
+def test_a_browser_recording_is_accepted_at_all():
+    """MediaRecorder gives Opus in WebM and offers no say in the matter, so
+    refusing the container would mean refusing the app's own record button."""
+    assert upload.check("Recording 4 Sep 17.45.webm") == "audio/webm"
+
+
+@needs_ffmpeg
+def test_webm_is_remuxed_to_ogg_without_touching_the_audio(tmp_path):
+    """Both are containers around the same Opus stream, so this is a remux and
+    not a re-encode. The transcription model reads Ogg and does not read WebM."""
+    src = _opus_webm(tmp_path / "spoken.webm")
+    out, mime = upload.normalise(src)
+    assert out.suffix == ".ogg" and mime == "audio/ogg"
+    assert not src.exists(), "the original was left behind"
+    codec = subprocess.run(
+        ["ffprobe", "-v", "error", "-show_entries", "stream=codec_name",
+         "-of", "csv=p=0", str(out)], capture_output=True, text=True).stdout
+    assert codec.strip() == "opus", "the audio was re-encoded, not remuxed"
+
+
+@needs_ffmpeg
+def test_without_ffmpeg_the_recording_is_kept_rather_than_lost(tmp_path, monkeypatch):
+    """He would rather have the audio and a transcription he can retry after
+    installing ffmpeg than lose the meeting."""
+    from src.pipeline import chunking
+    monkeypatch.setattr(chunking, "have_ffmpeg", lambda: False)
+    src = _opus_webm(tmp_path / "spoken.webm")
+    out, mime = upload.normalise(src)
+    assert out == src and out.exists() and mime == "audio/webm"
+
+
+def test_a_format_the_pipeline_already_reads_is_left_alone(tmp_path):
+    kept = tmp_path / "meeting.mp3"
+    kept.write_bytes(MP3)
+    out, mime = upload.normalise(kept)
+    assert out == kept and mime == "audio/mpeg"
+
+
+@needs_ffmpeg
+def test_the_same_recording_twice_is_still_one_meeting(tmp_path):
+    """The hash is of what was sent, not of what is on disk after remuxing.
+    Otherwise a retry of the same upload would make a second meeting."""
+    raw = _opus_webm(tmp_path / "twice.webm").read_bytes()
+    first = upload.store("Recording 4 Sep 17.45.webm", io.BytesIO(raw))
+    again = upload.store("Recording 4 Sep 17.45.webm", io.BytesIO(raw))
+    assert again["duplicate"] is True
+    assert again["id"] == first["id"]
+
+
+@needs_ffmpeg
+def test_a_recording_lands_as_a_meeting_the_pipeline_can_run(tmp_path):
+    raw = _opus_webm(tmp_path / "landed.webm").read_bytes()
+    made = upload.store("Recording 5 Sep 09.15.webm", io.BytesIO(raw))
+    assert made["title"] == "Recording 5 Sep 09.15"
+    with db.cursor() as conn:
+        row = conn.execute("SELECT mime, audio_path, status FROM recordings WHERE id = ?",
+                           (made["id"],)).fetchone()
+    assert row["mime"] == "audio/ogg"
+    assert row["audio_path"].endswith(".ogg")
+    assert row["status"] == "queued"

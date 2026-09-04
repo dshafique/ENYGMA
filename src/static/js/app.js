@@ -158,6 +158,11 @@ async function send(url, init) {
 }
 
 /* -------------------------------------------------------------- upload */
+// Set by the upload block, used by the recorder: a recording goes up the same
+// way a dropped file does, lands in the same queue, and shows the same words
+// back. Two upload paths would be two sets of failure messages.
+let sendFiles = null;
+
 {
   const drop = $("#drop");
   const input = $("#file");
@@ -170,6 +175,8 @@ async function send(url, init) {
       drop.addEventListener(k, (e) => { stop(e); drop.classList.remove("over"); }));
     drop.addEventListener("drop", (e) => upload(e.dataTransfer.files));
     input.addEventListener("change", () => upload(input.files));
+
+    sendFiles = upload;
 
     async function upload(files) {
       if (!files || !files.length) return;
@@ -203,6 +210,240 @@ async function send(url, init) {
       }
     }
   }
+}
+
+/* ----------------------------------------------------------- recording */
+/* Press record, walk into the meeting, press stop. That is the whole feature,
+   and it is the one that changes how ENYGMA gets used: before this, catching a
+   meeting meant opening the phone's voice recorder, remembering to stop it,
+   coming back here and finding the file in a picker -- three apps and a manual
+   step at the exact moment he is least able to fiddle.
+
+   Two engines behind one button. In a browser it is MediaRecorder, which works
+   and is at the mercy of the tab staying alive. Inside the native shell it is
+   the Capacitor plugin with a foreground service, which survives the screen
+   going off and the phone going in a pocket. The page picks at runtime and the
+   rest of the code below cannot tell which it got. */
+{
+  const box = $("#recorder");
+  const button = $("#rec");
+  const clock = $("#rectime");
+  const hold = $("#recpause");
+  const drop = $("#reccancel");
+  const msg = $("#recmsg");
+  const say = (t, bad) => {
+    if (!msg) return;
+    msg.textContent = t || "";
+    msg.classList.toggle("danger", !!bad);
+  };
+
+  const cap = window.Capacitor;
+  const isNative = !!(cap && cap.isNativePlatform && cap.isNativePlatform());
+  const plugins = (cap && cap.Plugins) || {};
+
+  const two = (n) => String(n).padStart(2, "0");
+  const spell = (ms) => {
+    const all = Math.floor(ms / 1000);
+    const h = Math.floor(all / 3600);
+    const m = Math.floor((all % 3600) / 60);
+    return (h ? `${h}:${two(m)}` : `${m}`) + ":" + two(all % 60);
+  };
+
+  /* A name he will recognise in a list a week later. Deliberately not
+     2026-09-04T173000: the ingest strips a leading timestamp from a title,
+     which would leave every recording called "Untitled recording". */
+  const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const named = (ext) => {
+    const now = new Date();
+    return `Recording ${now.getDate()} ${MONTHS[now.getMonth()]} ` +
+           `${two(now.getHours())}.${two(now.getMinutes())}.${ext}`;
+  };
+
+  /* ---- the browser engine */
+  function inBrowser() {
+    let media = null, chunks = [], stream = null, type = "";
+    /* Opus in WebM is what Chrome and Android give and they offer no say in it.
+       The server remuxes to Ogg on the way in, losslessly, because the
+       transcription model reads Ogg and does not read WebM. */
+    const WANTED = ["audio/webm;codecs=opus", "audio/webm", "audio/ogg;codecs=opus", "audio/mp4"];
+    return {
+      supported: !!(navigator.mediaDevices && window.MediaRecorder),
+      async start() {
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: { echoCancellation: true, noiseSuppression: true, channelCount: 1 },
+        });
+        type = WANTED.find((t) => MediaRecorder.isTypeSupported(t)) || "";
+        media = new MediaRecorder(stream, type ? { mimeType: type, audioBitsPerSecond: 48000 } : {});
+        chunks = [];
+        media.addEventListener("dataavailable", (e) => { if (e.data.size) chunks.push(e.data); });
+        // A slice a second, so a crash costs a second rather than the meeting.
+        media.start(1000);
+      },
+      pause() { media && media.state === "recording" && media.pause(); },
+      resume() { media && media.state === "paused" && media.resume(); },
+      async stop() {
+        const done = new Promise((yes) => media.addEventListener("stop", yes, { once: true }));
+        media.stop();
+        await done;
+        stream.getTracks().forEach((t) => t.stop());
+        const mime = media.mimeType || type || "audio/webm";
+        const ext = mime.includes("ogg") ? "ogg" : mime.includes("mp4") ? "m4a" : "webm";
+        return new File(chunks, named(ext), { type: mime.split(";")[0] });
+      },
+      async cancel() {
+        try { media && media.state !== "inactive" && media.stop(); } catch (e) {}
+        stream && stream.getTracks().forEach((t) => t.stop());
+        chunks = [];
+      },
+    };
+  }
+
+  /* ---- the native engine
+     The recorder plugin writes a file and hands back its path. That path cannot
+     be fetched from this page: the app loads from enygma.arkhm.io and the
+     native file handler answers on another origin, so a fetch at it is
+     cross-origin and blocked. Filesystem.readFile brings the bytes across
+     instead. */
+  function inShell() {
+    const Rec = plugins.AudioRecorder;
+    const Files = plugins.Filesystem;
+    const Service = plugins.ForegroundService;
+    return {
+      supported: !!(Rec && Files),
+      async start() {
+        const ok = await Rec.requestPermissions();
+        if (ok && ok.microphone && ok.microphone !== "granted") {
+          throw new Error("The microphone is not allowed. Turn it on in Android settings.");
+        }
+        await Rec.startRecording();
+        // The notification is what stops Android killing the process. Without
+        // it the recording ends when the screen does, silently.
+        if (Service) {
+          try {
+            await Service.startForegroundService({
+              id: 4073, title: "ENYGMA", body: "Recording this meeting",
+              smallIcon: "ic_stat_icon",
+            });
+          } catch (e) { /* recording still works in the foreground */ }
+        }
+      },
+      pause() { Rec.pauseRecording && Rec.pauseRecording(); },
+      resume() { Rec.resumeRecording && Rec.resumeRecording(); },
+      async stop() {
+        const out = await Rec.stopRecording();
+        if (Service) { try { await Service.stopForegroundService(); } catch (e) {} }
+        const read = await Files.readFile({ path: out.uri });
+        const raw = atob(read.data);
+        const bytes = new Uint8Array(raw.length);
+        for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
+        const ext = (out.uri.split(".").pop() || "m4a").toLowerCase();
+        const mime = ext === "m4a" ? "audio/mp4" : ext === "aac" ? "audio/aac" : "audio/ogg";
+        return new File([bytes], named(ext), { type: mime });
+      },
+      async cancel() {
+        try { await Rec.cancelRecording(); } catch (e) {}
+        if (Service) { try { await Service.stopForegroundService(); } catch (e) {} }
+      },
+    };
+  }
+
+  const engine = isNative ? inShell() : inBrowser();
+
+  if (box && !engine.supported) {
+    box.hidden = true;                 // no microphone here; the dropzone remains
+  }
+
+  /* began: when it started. held: how long it has been paused for in total.
+     heldAt: when the current pause began, or 0. The clock reads the same while
+     paused as it did the moment it was paused. */
+  let going = false, ticker = null, began = 0, held = 0, heldAt = 0;
+  const paused = () => heldAt !== 0;
+  const elapsed = () => (heldAt || Date.now()) - began - held;
+
+  const show = () => { if (clock) clock.textContent = spell(going ? elapsed() : 0); };
+  const dressed = () => {
+    box && box.classList.toggle("on", going);
+    box && box.classList.toggle("held", paused());
+    // The word only. Writing to the button itself would take the recording dot
+    // with it, and it never came back.
+    const word = button && button.querySelector(".recword");
+    if (word) word.textContent = going ? "Stop" : "Record";
+    [clock, hold, drop].forEach((el) => { if (el) el.hidden = !going; });
+    if (hold) hold.textContent = paused() ? "Resume" : "Pause";
+  };
+
+  // Leaving the page ends the recording, so say so rather than losing it. In
+  // the native shell this never fires, which is the point of the native shell.
+  const guard = (e) => { e.preventDefault(); e.returnValue = ""; };
+
+  button?.addEventListener("click", async () => {
+    if (!going) {
+      button.disabled = true;
+      say("");
+      try {
+        await engine.start();
+      } catch (err) {
+        say(err && err.name === "NotAllowedError"
+            ? "The microphone was refused. Allow it for this site and try again."
+            : `Could not start recording: ${err && err.message ? err.message : err}`, true);
+        button.disabled = false;
+        return;
+      }
+      going = true; began = Date.now(); held = 0; heldAt = 0;
+      button.disabled = false;
+      window.addEventListener("beforeunload", guard);
+      ticker = setInterval(show, 500);
+      show(); dressed();
+      return;
+    }
+
+    // Stopping. The file goes up the same path a dropped one does.
+    button.disabled = true;
+    clearInterval(ticker);
+    try {
+      const spent = elapsed();
+      const file = await engine.stop();
+      going = false; heldAt = 0;
+      window.removeEventListener("beforeunload", guard);
+      dressed();
+      if (!file.size) { say("That recording came out empty. Nothing was sent.", true); return; }
+      say(`Sending ${spell(spent)} of audio\u2026`);
+      if (sendFiles) await sendFiles([file]);
+      else say("Recorded, but the uploader is not on this page.", true);
+    } catch (err) {
+      say(`Could not save that recording: ${err && err.message ? err.message : err}`, true);
+      going = false;
+      window.removeEventListener("beforeunload", guard);
+      dressed();
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  hold?.addEventListener("click", () => {
+    if (!going) return;
+    if (paused()) {
+      held += Date.now() - heldAt;
+      heldAt = 0;
+      engine.resume();
+    } else {
+      heldAt = Date.now();
+      engine.pause();
+    }
+    dressed(); show();
+  });
+
+  drop?.addEventListener("click", async () => {
+    if (!going) return;
+    if (!confirm("Throw this recording away? It has not been saved anywhere.")) return;
+    clearInterval(ticker);
+    await engine.cancel();
+    going = false; heldAt = 0;
+    window.removeEventListener("beforeunload", guard);
+    dressed();
+    say("Discarded.");
+  });
 }
 
 /* ------------------------------------------------------ detail: tabs */
