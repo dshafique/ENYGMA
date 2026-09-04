@@ -44,9 +44,8 @@
     <div class="item entry" data-entry="{{ e.id }}">
       <input type="checkbox" data-cross="{{ e.id }}" aria-label="Cross off: {{ e.text }}">
       <span class="txt">
-        <span class="what">{{ e.text }}</span>
-        <span class="where"><span class="ref mono">#{{ e.id }}</span>
-          <span class="kindtag">{{ e.kind }}</span> {{ e.created_at|ago }}</span>
+        <span class="what"><span class="ref mono">#{{ e.id }}</span>{{ e.text }}</span>
+        <span class="where"><span class="kindtag">{{ e.kind }}</span> {{ e.created_at|ago }}</span>
       </span>
     </div>
     {% endfor %}
@@ -69,9 +68,8 @@
       <input type="checkbox" checked data-cross="{{ e.id }}"
              aria-label="Put back: {{ e.text }}">
       <span class="txt">
-        <span class="what">{{ e.text }}</span>
-        <span class="where"><span class="ref mono">#{{ e.id }}</span>
-          <span class="kindtag">{{ e.kind }}</span> {{ e.done_at|ago }}
+        <span class="what"><span class="ref mono">#{{ e.id }}</span>{{ e.text }}</span>
+        <span class="where"><span class="kindtag">{{ e.kind }}</span> {{ e.done_at|ago }}
           {%- if e.note %} · {{ e.note }}{% endif %}</span>
       </span>
     </div>

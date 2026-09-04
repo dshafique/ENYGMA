@@ -212,6 +212,59 @@ let sendFiles = null;
   }
 }
 
+/* ------------------------------------------------- the Friday reminder */
+/* The note is written for him whether or not he looks at it, which is the
+   problem: a note nobody opens is a note nobody sends. So on Friday the phone
+   taps him on the shoulder.
+
+   Scheduled on the device, not pushed from the Spark. A push would need
+   Firebase, a token table and a sender in the worker, and would put a Google
+   dependency in the middle of something that is otherwise entirely his. A
+   repeating local alarm needs none of that, and "it is Friday afternoon" is a
+   fact the phone already knows.
+
+   Only inside the native shell. A browser tab cannot hold an alarm, and asking
+   for notification permission in one would be a prompt that buys nothing.
+
+   Rescheduled on every launch with the same id, which replaces rather than
+   stacks -- so changing ENYGMA_WEEKNOTE_HOUR moves the reminder the next time
+   he opens the app, and a hundred launches do not make a hundred alarms. */
+{
+  const cap = window.Capacitor;
+  const Notify = cap && cap.isNativePlatform && cap.isNativePlatform()
+    ? (cap.Plugins || {}).LocalNotifications : null;
+
+  if (Notify) {
+    const meta = document.querySelector('meta[name="enygma-weeknote-hour"]');
+    const written = parseInt(meta && meta.content, 10);
+    // An hour after the note is written, so the worker has finished before the
+    // phone claims it is ready. Landing first would send him to an empty card.
+    const hour = (Number.isFinite(written) ? written : 15) + 1;
+
+    (async () => {
+      try {
+        let allowed = await Notify.checkPermissions();
+        if (allowed && allowed.display !== "granted") {
+          allowed = await Notify.requestPermissions();
+        }
+        if (!allowed || allowed.display !== "granted") return;
+        await Notify.schedule({
+          notifications: [{
+            id: 4073,
+            title: "Your week is written",
+            body: "Read it before you send it.",
+            // Capacitor counts weekdays from Sunday, so Friday is 6.
+            schedule: { on: { weekday: 6, hour: Math.min(hour, 23), minute: 0 },
+                        allowWhileIdle: true },
+          }],
+        });
+      } catch (e) {
+        // A phone that refuses the alarm still has a working app.
+      }
+    })();
+  }
+}
+
 /* ----------------------------------------------------------- recording */
 /* Press record, walk into the meeting, press stop. That is the whole feature,
    and it is the one that changes how ENYGMA gets used: before this, catching a

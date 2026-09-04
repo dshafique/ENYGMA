@@ -1089,6 +1089,21 @@ html.splash-done .splash { display: none; }
 
 /* The filters, which are links rather than script: a filtered list is a place,
    it survives a reload, and it can be sent to somebody. */
+/* The number leads the line, because the point of a ticket number is saying it
+   out loud -- "look at 4" -- and one buried in the metadata under the text is
+   something you have to go and find rather than something you can scan by. It
+   is the row id, so it is assigned on entry, never reused, and never renumbered
+   when something above it is crossed off. */
+.entry .what { display: block; padding-left: 3.1em; text-indent: -3.1em; }
+.ref { display: inline-block; min-width: 2.4em; margin-right: var(--space-8);
+       color: var(--text-muted); font-size: 12px; letter-spacing: .02em;
+       text-indent: 0; vertical-align: baseline; }
+/* The hanging indent is the point: a second line that runs back under the
+   number turns the column of numbers into ragged noise, and the column is the
+   only reason to put them first. */
+.entry .where { padding-left: 3.1em; }
+.entry.done .ref { opacity: .6; }
+
 .benchfilters { margin-bottom: var(--space-20); }
 .benchfilters .chip.on { background: var(--accent); color: var(--on-accent);
                          border-color: var(--accent); }

@@ -29,6 +29,19 @@ UNRELEASED = "UNRELEASED"
 
 RELEASES = [
     {
+        "mark": "Mk II.40",
+        "date": "2026-09-04",
+        "headline": "A nudge on Friday",
+        "items": [
+            "The app reminds you on Friday afternoon that your week is written, "
+            "so you can read it and send it.",
+            "It comes from your phone, not from ENYGMA, so nothing about your "
+            "week leaves the Spark to make it happen.",
+            "Bench items show their number at the front of the line, so you can "
+            "point at one by saying it.",
+        ],
+    },
+    {
         "mark": "Mk II.39",
         "date": "2026-09-04",
         "headline": "Record a meeting from inside ENYGMA",

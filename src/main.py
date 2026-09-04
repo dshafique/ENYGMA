@@ -54,6 +54,9 @@ templates.env.filters.update(fmt.FILTERS)
 # stylesheet cannot serve it against this markup.
 templates.env.globals["build"] = config.VERSION
 templates.env.globals["mark_label"] = config.MARK
+# The page schedules the Friday reminder on the device itself, so it has to know
+# when the note is written. Read from config rather than written twice.
+templates.env.globals["weeknote_hour"] = config.WEEKNOTE_HOUR
 # Every page that renders an action needs the same set of states, in the same
 # order, spelled the same way.
 templates.env.globals["states"] = [

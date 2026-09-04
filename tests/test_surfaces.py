@@ -898,3 +898,23 @@ def test_the_build_notes_say_the_two_things_cap_sync_cannot_do():
     assert 'android:screenOrientation="unspecified"' in notes
     assert "FOREGROUND_SERVICE_MICROPHONE" in notes
     assert "RECORD_AUDIO" in notes
+
+
+def test_the_friday_reminder_is_scheduled_from_one_source_of_truth():
+    """The hour the note is written lives in config.py. If the page carried its
+    own copy, changing the setting would move the note and leave the reminder
+    behind, and he would be told his week was ready an hour before it was."""
+    body = client(True).get("/").text
+    assert 'name="enygma-weeknote-hour"' in body
+    from src.config import config
+    assert f'content="{config.WEEKNOTE_HOUR}"' in body
+
+    js = (pathlib.Path(__file__).resolve().parent.parent
+          / "src/static/js/app.js").read_text()
+    block = js[js.index("the Friday reminder */"):js.index("----- recording */")]
+    assert "enygma-weeknote-hour" in block, "the page hard-codes the hour"
+    assert "written + 1" in block or "written) ? written : 15) + 1" in block, \
+        "the reminder does not wait for the note to be written"
+    # One id, so a launch replaces rather than stacks.
+    assert block.count("id: 4073") == 1
+    assert "isNativePlatform" in block, "a browser tab would be asked for permission"

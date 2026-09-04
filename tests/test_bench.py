@@ -310,3 +310,35 @@ def test_the_header_count_does_not_move_with_the_filter_either():
     header = html[html.index('<header class="topbar">'):html.index("</header>")]
     assert "{{ all_open }} open" in header
     assert "open|length" not in header, "the header is counting the filtered list"
+
+
+def test_every_entry_has_a_number_that_is_never_reused():
+    """He asked for ticket numbers. They were already there, buried under the
+    text where they read as metadata rather than as a name for the thing.
+
+    The number is the row id, so it is assigned on entry, survives being crossed
+    off, and is never handed to a second entry. That is what makes "look at 4"
+    mean one thing forever.
+    """
+    from src import bench
+    first = bench.add("Something broke", "bug")
+    second = bench.add("Something else", "idea")
+    assert second["id"] > first["id"]
+    bench.cross_off(first["id"], True)
+    third = bench.add("A third thing", "bug")
+    assert third["id"] > second["id"], "an id was reused after a cross-off"
+    assert bench.entry(first["id"])["id"] == first["id"], "the number moved"
+
+
+def test_the_number_leads_the_line_so_the_column_can_be_scanned():
+    """A number after the text is something you go and find. The point of one is
+    saying it out loud, which needs it in the same place on every row."""
+    page = (pathlib.Path(__file__).resolve().parent.parent
+            / "src/templates/backlog.html").read_text()
+    for row in ("what", "where"):
+        assert f'class="{row}"' in page
+    # The ref sits inside the text span, before the text itself.
+    assert '<span class="what"><span class="ref mono">#{{ e.id }}</span>{{ e.text }}' in page
+    css = (pathlib.Path(__file__).resolve().parent.parent
+           / "src/static/css/app.css").read_text()
+    assert "text-indent: -3.1em" in css, "a wrapped line runs back under the number"

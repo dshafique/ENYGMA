@@ -27,6 +27,7 @@ machine. From this folder:
     npm install @capacitor/filesystem@latest
     npm install @capgo/capacitor-audio-recorder@latest
     npm install @capawesome-team/capacitor-android-foreground-service@latest
+    npm install @capacitor/local-notifications@latest
 
     npx cap add android
     npx cap sync
@@ -80,13 +81,27 @@ explicit "I handle every orientation" and overrides the lock. If you ever want i
 pinned regardless of the phone, that is `"portrait"` here, not in the web
 manifest.
 
+## The Friday reminder
+
+`@capacitor/local-notifications` is what lets the phone tap him on the shoulder
+on Friday afternoon. Nothing to configure: the web app schedules it itself on
+launch, an hour after `ENYGMA_WEEKNOTE_HOUR`, and reschedules under the same id
+so it replaces rather than stacks.
+
+Deliberately local rather than pushed. A push would mean Firebase, a token table
+and a sender in the worker, and would put a Google dependency in the middle of
+something that is otherwise entirely his. "It is Friday afternoon" is a fact the
+phone already knows.
+
 ## Icons
 
-    npm install -D @capacitor/assets
-    npx capacitor-assets generate --android
-
-Point it at ENYGMA's existing 512px icon (`src/static/icons/icon-512.png` in the
-app repo) placed at `assets/icon.png` here.
+Do **not** run `capacitor-assets generate`. It insets the adaptive-icon
+background by 16.7%, which draws the mark as a small dark square floating inside
+a white ring. The icons under `android/app/src/main/res/mipmap-*` were generated
+directly from `tools/gen_icons.py` in the app repo -- the same 4x4 cipher grid
+the app draws in its own header -- at the right sizes for both the 108dp adaptive
+canvas and the 48dp legacy one, with a `monochrome` layer for themed icons on
+Android 13 and up. Regenerating with the tool will overwrite them.
 
 ## What this does not fix
 
@@ -108,6 +123,9 @@ Each is one plugin and a few lines, and none of them are needed for recording:
 
 - Biometric unlock — `@aparajita/capacitor-biometric-auth`, a face or fingerprint
   gate in front of the passkey.
-- Push — `@capacitor/push-notifications`. The Friday note is written, a
-  transcription finished, a recording failed.
+- Push — `@capacitor/push-notifications`, for the two things a local alarm
+  cannot do: a transcription finished, and a transcription failed. The second is
+  the valuable one, because a failure currently sits silently until he happens to
+  look. Needs a Firebase project, `google-services.json`, an FCM key on the Spark
+  and a token table.
 - Share target — take an audio file from any app straight into ENYGMA.

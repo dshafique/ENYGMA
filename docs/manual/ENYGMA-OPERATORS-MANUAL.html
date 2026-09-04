@@ -2630,6 +2630,29 @@ still stuck on the humidity drift</pre>
       <code>POST_NOTIFICATIONS</code> permissions.</li>
   </ul>
 
+  <h2>The Friday reminder</h2>
+  <p>
+    The note is written whether or not anyone looks at it, which is the problem:
+    a note nobody opens is a note nobody sends. So inside the shell the phone
+    schedules itself a reminder for Friday afternoon, an hour after
+    <code>ENYGMA_WEEKNOTE_HOUR</code>, and taps him on the shoulder.
+  </p>
+  <p>
+    Local, not pushed. A push notification would mean a Firebase project, a
+    device-token table and a sender in the worker, and would put a Google
+    dependency in the middle of a system that is otherwise entirely his.
+    "It is Friday afternoon" is a fact the phone already knows, so it does not
+    need telling. The page reschedules it on every launch under one id, which
+    replaces rather than stacks, so changing the setting moves the reminder and a
+    hundred launches do not make a hundred alarms.
+  </p>
+  <p>
+    The two notifications a local alarm cannot give are the valuable ones: a
+    transcription that finished, and a transcription that failed. The second
+    matters most, because a failure currently sits silently until he happens to
+    look. Both need push, and push needs Firebase.
+  </p>
+
   <h2>What it is honest about</h2>
   <p>
     The shell runs on Capacitor's <code>server.url</code>, which Capacitor's own
