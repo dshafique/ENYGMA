@@ -36,6 +36,8 @@ RELEASES = [
             "The app follows your phone's rotation lock instead of overriding it.",
             "The writing bar stays above the keyboard, on any browser.",
             "Home shows what the paid models have cost this month.",
+            "The Bench has filters. The chips above the list are filters now, and "
+            "the ones inside the Add box set what you are adding.",
         ],
     },
     {

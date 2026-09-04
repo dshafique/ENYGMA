@@ -6,7 +6,7 @@
 <header class="topbar">
   <div class="grow">
     <h1>Bench</h1>
-    <p class="sub">{{ open|length }} open{% if done %} · {{ done|length }} crossed off{% endif %}</p>
+    <p class="sub">{{ all_open }} open{% if showing %} · showing {{ showing }}{% endif %}</p>
   </div>
 </header>
 
@@ -14,7 +14,8 @@
   {{ bench.segments('backlog') }}
 
   <form class="addbox" id="addbox" method="post" action="/backlog">
-    <div class="kinds" role="radiogroup" aria-label="What is it">
+    <span class="label addlabel">Add</span>
+    <div class="kinds" role="radiogroup" aria-label="What kind is it">
       {% for key, label in kinds %}
       <label class="kind">
         <input type="radio" name="kind" value="{{ key }}" {{ 'checked' if loop.first }}>
@@ -23,9 +24,18 @@
       {% endfor %}
     </div>
     <textarea name="text" id="entry" rows="1" required maxlength="2000"
-              placeholder="What happened, or what to try"></textarea>
+              placeholder="What happened"></textarea>
     <button class="btn sm" type="submit">Add</button>
   </form>
+
+  <div class="filters benchfilters">
+    <a class="chip{{ ' on' if not showing }}" href="/backlog">All
+      <span class="n">{{ all_open }}</span></a>
+    {% for key, label in kinds %}
+    <a class="chip{{ ' on' if showing == key }}" href="/backlog?kind={{ key }}">{{ label }}
+      <span class="n">{{ tally[key] }}</span></a>
+    {% endfor %}
+  </div>
 
   {% if open %}
   <div class="block">
@@ -43,8 +53,12 @@
   </div>
   {% elif not done %}
   <div class="empty"><div class="cell"></div>
+    {% if showing %}
+    <p>Nothing open under {{ showing }}. <a href="/backlog">Show everything</a>.</p>
+    {% else %}
     <p>Nothing waiting. Anything you type above lands here and stays until
-       somebody crosses it off.</p></div>
+       somebody crosses it off.</p>
+    {% endif %}</div>
   {% endif %}
 
   {% if done %}

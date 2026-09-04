@@ -742,8 +742,15 @@ pre.doc {
    One box at the top and one list under it. He is standing at a bench with
    one hand free, so the whole thing has to work in a sentence and a tap.
    ====================================================================== */
+/* A surface of its own, because without one the kind chips sat above the list
+   looking exactly like the filter chips on the Meetings tab, and he tapped them
+   expecting the list to filter. A control that looks like a filter and is not
+   one is worse than no control. */
 .addbox { display: grid; grid-template-columns: 1fr auto; gap: var(--space-8);
-          align-items: end; margin-bottom: var(--space-32); }
+          align-items: end; margin-bottom: var(--space-20);
+          background: var(--surface); border: 1px solid var(--border-divider);
+          border-radius: var(--radius-lg); padding: var(--space-16); }
+.addlabel { grid-column: 1 / -1; }
 .addbox .kinds { grid-column: 1 / -1; display: flex; gap: var(--space-6); }
 .addbox textarea {
   min-height: 44px; max-height: 160px; resize: none; padding: var(--space-12);
@@ -982,3 +989,11 @@ html.splash-done .splash { display: none; }
                          gap: var(--space-16); }
   .spendbar { grid-template-columns: 4.2rem 1fr auto; }
 }
+
+/* The filters, which are links rather than script: a filtered list is a place,
+   it survives a reload, and it can be sent to somebody. */
+.benchfilters { margin-bottom: var(--space-20); }
+.benchfilters .chip.on { background: var(--accent); color: var(--on-accent);
+                         border-color: var(--accent); }
+.benchfilters .chip .n { font-family: var(--font-mono); font-size: 10px;
+                         opacity: .7; margin-left: var(--space-4); }

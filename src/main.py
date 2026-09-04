@@ -737,12 +737,14 @@ def _bench_context(**extra) -> dict:
 
 
 @app.get("/backlog", response_class=HTMLResponse)
-def backlog_page(request: Request):
+def backlog_page(request: Request, kind: str | None = None):
     if current(request) is None:
         return RedirectResponse("/lock", status_code=302)
-    data = bench_repo.listing()
+    data = bench_repo.listing(kind)
     return page(request, "backlog.html", "bench",
-                _bench_context(open=data["open"], done=data["done"]))
+                _bench_context(open=data["open"], done=data["done"],
+                               showing=data["kind"], tally=data["tally"],
+                               all_open=data["all_open"]))
 
 
 @app.post("/backlog")

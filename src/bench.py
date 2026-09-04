@@ -53,13 +53,26 @@ def cross_off(entry_id: int, done: bool = True, note: str | None = None) -> dict
     return entry(entry_id)
 
 
-def listing() -> dict:
+def listing(kind: str | None = None) -> dict:
+    """Everything, or one kind of thing.
+
+    The counts are of everything regardless of the filter, because a filter that
+    also hides the number of things it is hiding gives him no way to know what
+    he is not looking at.
+    """
+    kind = kind if kind in KINDS else None
     with cursor() as conn:
         rows = [dict(r) for r in conn.execute(
             "SELECT * FROM bench_entries ORDER BY done, id DESC")]
-    return {"open": [r for r in rows if not r["done"]],
-            "done": [r for r in rows if r["done"]],
-            "total": len(rows)}
+    shown = [r for r in rows if kind is None or r["kind"] == kind]
+    tally = {k: sum(1 for r in rows if r["kind"] == k and not r["done"])
+             for k in KINDS}
+    return {"open": [r for r in shown if not r["done"]],
+            "done": [r for r in shown if r["done"]],
+            "total": len(rows),
+            "kind": kind,
+            "tally": tally,
+            "all_open": sum(1 for r in rows if not r["done"])}
 
 
 def counts() -> dict:

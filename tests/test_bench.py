@@ -231,3 +231,82 @@ def test_what_he_attached_actually_reaches_the_model():
     # And it is told there is one, so it answers about the thing rather than
     # around it.
     assert "attached" in parts[0]["text"]
+
+
+# ------------------------------------------------------------------ filters
+
+def test_the_list_can_be_narrowed_to_one_kind():
+    from src import bench
+    with db.cursor() as conn:
+        conn.execute("DELETE FROM bench_entries")
+    bench.add("Humidity drifts", "bug")
+    bench.add("Log the CO2 curve", "idea")
+    bench.add("Write the steps down", "todo")
+    bench.add("Camera mount slips", "bug")
+
+    assert len(bench.listing()["open"]) == 4
+    only_bugs = bench.listing("bug")
+    assert [e["kind"] for e in only_bugs["open"]] == ["bug", "bug"]
+    assert only_bugs["kind"] == "bug"
+
+
+def test_a_filter_never_hides_how_much_it_is_hiding():
+    """A count that moves with the filter gives him no way to know what he is
+    not looking at."""
+    from src import bench
+    with db.cursor() as conn:
+        conn.execute("DELETE FROM bench_entries")
+    bench.add("One", "bug"); bench.add("Two", "bug"); bench.add("Three", "idea")
+
+    filtered = bench.listing("idea")
+    assert len(filtered["open"]) == 1
+    assert filtered["all_open"] == 3, "the total moved with the filter"
+    assert filtered["tally"] == {"bug": 2, "idea": 1, "todo": 0}
+
+
+def test_a_crossed_off_entry_does_not_count_as_open_in_the_tally():
+    from src import bench
+    with db.cursor() as conn:
+        conn.execute("DELETE FROM bench_entries")
+    one = bench.add("Fixed later", "bug")
+    bench.add("Still open", "bug")
+    bench.cross_off(one["id"], True, "done")
+    assert bench.listing()["tally"]["bug"] == 1
+    assert bench.listing()["all_open"] == 1
+
+
+def test_a_nonsense_filter_shows_everything_rather_than_nothing():
+    from src import bench
+    with db.cursor() as conn:
+        conn.execute("DELETE FROM bench_entries")
+    bench.add("One", "bug")
+    out = bench.listing("banana")
+    assert out["kind"] is None and len(out["open"]) == 1
+
+
+def test_the_add_form_does_not_look_like_a_filter():
+    """The kind chips sat above the list looking exactly like the filter chips
+    on the Meetings tab, so he tapped them expecting the list to filter and
+    nothing happened. A control that looks like a filter and is not one is worse
+    than no control."""
+    css = (pathlib.Path(__file__).resolve().parent.parent
+           / "src/static/css/app.css").read_text()
+    block = css[css.index(".addbox {"):css.index(".addlabel")]
+    assert "background: var(--surface)" in block
+    assert "border:" in block
+
+    html = (pathlib.Path(__file__).resolve().parent.parent
+            / "src/templates/backlog.html").read_text()
+    assert 'class="filters benchfilters"' in html, "there are still no filters"
+    # And they are links, so a filtered list is a place that survives a reload.
+    assert 'href="/backlog?kind=' in html
+
+
+def test_the_header_count_does_not_move_with_the_filter_either():
+    """It said "2 open" under a Bug filter, one line above the tally that exists
+    to stop exactly that."""
+    html = (pathlib.Path(__file__).resolve().parent.parent
+            / "src/templates/backlog.html").read_text()
+    header = html[html.index('<header class="topbar">'):html.index("</header>")]
+    assert "{{ all_open }} open" in header
+    assert "open|length" not in header, "the header is counting the filtered list"
