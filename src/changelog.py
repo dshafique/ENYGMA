@@ -29,7 +29,7 @@ UNRELEASED = "UNRELEASED"
 
 RELEASES = [
     {
-        "mark": UNRELEASED,
+        "mark": "Mk II.30",
         "date": "2026-09-04",
         "headline": "The bench, and a say in who answers",
         "items": [

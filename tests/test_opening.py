@@ -27,10 +27,13 @@ def setup_module(_):
 # ------------------------------------------------------------- what changed
 
 def test_a_device_that_has_been_here_is_shown_what_it_missed():
+    """Deliberately no hard-coded release number. The number is assigned by the
+    stamper now, and a test that pins it would have to be edited on every
+    release, which is the coupling that was just removed."""
     from src import changelog
     got = changelog.since("Mk II.25")
-    assert [r["mark"] for r in got] == ["Mk II.29"]
-    assert changelog.since("Mk II.18")[0]["mark"] == "Mk II.29"
+    assert [r["mark"] for r in got] == [changelog.latest()]
+    assert changelog.since("Mk II.18")[0]["mark"] == changelog.latest()
     assert len(changelog.since("Mk II.18")) == 2
 
 
