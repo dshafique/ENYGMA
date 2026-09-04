@@ -22,9 +22,27 @@
   /* Before first paint, so a chosen theme never flashes the other one. */
   try { var t = localStorage.getItem("enygma-theme");
         if (t) document.documentElement.setAttribute("data-theme", t); } catch (e) {}
+  /* The opening plays once per launch, not once per tap. Every page here is a
+     real navigation, so without this it would replay on every single one, which
+     turns a nice thing into a tax on using the app. sessionStorage is exactly
+     the right lifetime: it lasts as long as the app is open and no longer. */
+  try { if (sessionStorage.getItem("enygma-opened"))
+          document.documentElement.classList.add("splash-done");
+        else sessionStorage.setItem("enygma-opened", "1"); } catch (e) {
+    document.documentElement.classList.add("splash-done");
+  }
 </script>
 </head>
 <body class="{% block bodyclass %}{% endblock %}">
+{% if not hide_splash %}
+<div class="splash" id="splash" aria-hidden="true">
+  <div class="splash-mark">
+    {% for n in range(16) %}<i{% if n in [0, 6, 9, 15] %} class="void"{% endif %}></i>{% endfor %}
+  </div>
+  <div class="splash-rule"></div>
+  <div class="splash-word">ENYGMA</div>
+</div>
+{% endif %}
 {% block shell %}
 {% import "_icons.html" as i %}
 {% from "_mark.html" import mark %}
@@ -94,6 +112,17 @@
     <button class="btn ghost" id="reauth-cancel">Cancel</button>
   </div>
 </div>
+
+<div class="sheet-scrim" id="newsheet" hidden
+     data-latest="{{ changelog_latest }}">
+  <div class="sheet whatsnew" role="dialog" aria-modal="true"
+       aria-labelledby="whatsnew-title">
+    <h2 id="whatsnew-title">What's new</h2>
+    <div class="releases" id="releases"></div>
+    <button class="btn" id="newsheet-close" type="button">Got it</button>
+  </div>
+</div>
+<script type="application/json" id="changelog">{{ changelog_json|safe }}</script>
 
 <nav class="tabbar" aria-label="Sections">
   {% for key, href, label in tabs %}

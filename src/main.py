@@ -27,6 +27,7 @@ from . import bench as bench_repo
 from . import models
 from . import attachments
 from . import spend
+from . import changelog
 from . import made as made_repo
 from . import (library, meetings as meetings_repo, actions as actions_repo,
                directory as directory_repo, chat as chat_repo, glossary,
@@ -110,8 +111,18 @@ def _greeting() -> str:
 
 
 def page(request: Request, name: str, nav: str, extra: dict) -> HTMLResponse:
-    """Every signed-in page goes through here so `nav` is never forgotten."""
-    return templates.TemplateResponse(request, name, {"nav": nav, **extra})
+    """Every signed-in page goes through here so `nav` is never forgotten.
+
+    The changelog rides along on every page rather than living behind its own
+    request, because the device decides whether it has anything to show and
+    asking the server that question would be a round trip on every open.
+    """
+    import json as _json
+    return templates.TemplateResponse(request, name, {
+        "nav": nav,
+        "changelog_latest": changelog.latest(),
+        "changelog_json": _json.dumps(changelog.RELEASES),
+        **extra})
 
 
 @app.get("/", response_class=HTMLResponse)

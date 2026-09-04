@@ -677,6 +677,79 @@ $("#retry")?.addEventListener("click", async (e) => {
   });
 }
 
+/* -------------------------------------------------------------- the opening */
+{
+  /* A tap ends it. It is under a second, but a second is a long time to a
+     person who opened the app to write one line down before they forget it,
+     and an animation nobody can get past is an animation they come to resent. */
+  const splash = $("#splash");
+  if (splash) {
+    const skip = () => splash.remove();
+    splash.addEventListener("pointerdown", skip);
+    // Whatever happens, it is not still there afterwards.
+    setTimeout(skip, 1750);
+  }
+}
+
+/* ------------------------------------------------------------- what changed */
+{
+  /* Once per device per release, and only for a device that has been here
+     before. A device seeing ENYGMA for the first time is shown nothing and
+     quietly marked current: a wall of history is not a welcome.
+
+     The decision is made here rather than on the server because the answer
+     depends on what this particular phone has already seen, and asking the
+     server that would be a round trip on every open. */
+  const scrim = $("#newsheet");
+  const holder = $("#releases");
+  const raw = $("#changelog");
+  if (scrim && holder && raw) {
+    const latest = scrim.dataset.latest;
+    let seen = null;
+    try { seen = localStorage.getItem("enygma-seen"); } catch (e) { seen = latest; }
+
+    const remember = () => { try { localStorage.setItem("enygma-seen", latest); }
+                             catch (e) {} };
+
+    if (seen !== latest) {
+      let releases = [];
+      try { releases = JSON.parse(raw.textContent) || []; } catch (e) {}
+      const marks = releases.map((r) => r.mark);
+      const at = marks.indexOf(seen);
+      // Unknown or absent: nothing useful to catch them up on.
+      const show = at > 0 ? releases.slice(0, at) : [];
+
+      if (show.length) {
+        for (const release of show) {
+          const el = document.createElement("div");
+          el.className = "release";
+          const mark = document.createElement("div");
+          mark.className = "rmark";
+          mark.textContent = `${release.mark} · ${release.date}`;
+          const head = document.createElement("h3");
+          head.textContent = release.headline;
+          const list = document.createElement("ul");
+          for (const item of release.items || []) {
+            const li = document.createElement("li");
+            li.textContent = item;
+            list.append(li);
+          }
+          el.append(mark, head, list);
+          holder.append(el);
+        }
+        // After the opening has finished, not on top of it.
+        setTimeout(() => { scrim.hidden = false; }, 1150);
+      } else {
+        remember();
+      }
+    }
+
+    const close = () => { scrim.hidden = true; remember(); };
+    $("#newsheet-close")?.addEventListener("click", close);
+    scrim.addEventListener("click", (e) => { if (e.target === scrim) close(); });
+  }
+}
+
 /* ------------------------------------------------------------------ the bench */
 {
   /* Crossing something off asks why, once, in a sheet. Two states only work if

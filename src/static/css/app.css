@@ -873,3 +873,87 @@ pre.doc {
                  padding: var(--space-6) 0;
                  border-top: 1px solid var(--border-divider); }
 .spendtable td:not(:first-child), .spendtable th:not(:first-child) { text-align: right; }
+
+
+/* ======================================================================
+   Opening
+
+   The mark is a cipher grid, so it solves itself: every cell lands on a
+   diagonal sweep, the grid fills completely, and then the four voids punch
+   out and it is suddenly the mark rather than a block of squares.
+
+   Timing is the whole design here. Fast enough not to be a tax on somebody
+   who opened the app to write one line down before they forget it; slow
+   enough that the grid is legible as a grid before it becomes the mark. A
+   tap ends it at any point, and anyone who has asked for less motion never
+   sees it at all.
+
+   Its own easing rather than the app's --ease. The interface wants a snappy
+   curve because a control should feel answered; this wants a long tail
+   because it is the only thing on screen and there is nothing to answer.
+   ====================================================================== */
+.splash {
+  position: fixed; inset: 0; z-index: 200; background: var(--bg);
+  display: grid; place-items: center; align-content: center; gap: var(--space-24);
+  animation: splash-out 380ms var(--ease) 1250ms both;
+  cursor: pointer;
+  --splash-ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+.splash-mark { display: grid; grid-template-columns: repeat(4, 1fr);
+               gap: 5px; width: 96px; height: 96px; }
+.splash-mark i { border-radius: 2.5px; background: var(--accent);
+                 animation: splash-land 300ms var(--splash-ease) both; }
+.splash-mark i.void { animation: splash-land 300ms var(--splash-ease) both,
+                                 splash-leave 400ms var(--splash-ease) both; }
+  .splash-mark i:nth-child(1) { animation-delay: 0ms, 340ms; }
+  .splash-mark i:nth-child(2) { animation-delay: 52ms, 392ms; }
+  .splash-mark i:nth-child(3) { animation-delay: 104ms, 444ms; }
+  .splash-mark i:nth-child(4) { animation-delay: 156ms, 496ms; }
+  .splash-mark i:nth-child(5) { animation-delay: 52ms, 392ms; }
+  .splash-mark i:nth-child(6) { animation-delay: 104ms, 444ms; }
+  .splash-mark i:nth-child(7) { animation-delay: 156ms, 496ms; }
+  .splash-mark i:nth-child(8) { animation-delay: 208ms, 548ms; }
+  .splash-mark i:nth-child(9) { animation-delay: 104ms, 444ms; }
+  .splash-mark i:nth-child(10) { animation-delay: 156ms, 496ms; }
+  .splash-mark i:nth-child(11) { animation-delay: 208ms, 548ms; }
+  .splash-mark i:nth-child(12) { animation-delay: 260ms, 600ms; }
+  .splash-mark i:nth-child(13) { animation-delay: 156ms, 496ms; }
+  .splash-mark i:nth-child(14) { animation-delay: 208ms, 548ms; }
+  .splash-mark i:nth-child(15) { animation-delay: 260ms, 600ms; }
+  .splash-mark i:nth-child(16) { animation-delay: 312ms, 652ms; }
+.splash-rule { width: 0; height: 1px; background: var(--border-rest);
+               animation: splash-draw 520ms var(--splash-ease) 560ms both; }
+.splash-word { font-family: var(--font-mono); font-size: 15px;
+               letter-spacing: .42em; text-indent: .42em; color: var(--text-dim);
+               animation: splash-rise 440ms var(--splash-ease) 640ms both; }
+
+@keyframes splash-land  { from { transform: scale(.5); opacity: 0; }
+                          to   { transform: scale(1);  opacity: 1; } }
+@keyframes splash-leave { to   { transform: scale(.2); opacity: 0; } }
+@keyframes splash-draw  { to   { width: 140px; } }
+@keyframes splash-rise  { from { opacity: 0; transform: translateY(6px); }
+                          to   { opacity: 1; transform: none; } }
+@keyframes splash-out   { to   { opacity: 0; visibility: hidden;
+                                 pointer-events: none; } }
+
+/* Already seen this launch: the markup is still served, it simply never runs. */
+html.splash-done .splash { display: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .splash { animation: splash-out 120ms linear 200ms both; }
+  .splash-mark i, .splash-rule, .splash-word { animation: none; }
+  .splash-mark i.void { opacity: 0; }
+  .splash-rule { width: 140px; }
+}
+
+/* What changed, once per device per release. */
+.sheet.whatsnew { align-items: stretch; text-align: left; max-height: 80vh; }
+.sheet.whatsnew h2 { text-align: left; }
+.releases { overflow-y: auto; display: flex; flex-direction: column;
+            gap: var(--space-24); margin-bottom: var(--space-8); }
+.release .rmark { font-family: var(--font-mono); font-size: 10px;
+                  letter-spacing: .08em; color: var(--text-muted); }
+.release h3 { font-size: 16px; margin: var(--space-4) 0 var(--space-8); }
+.release ul { margin: 0; padding-left: var(--space-20);
+              display: flex; flex-direction: column; gap: var(--space-6); }
+.release li { font-size: 14px; line-height: 21px; color: var(--text-dim); }
