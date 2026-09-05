@@ -29,6 +29,19 @@ UNRELEASED = "UNRELEASED"
 
 RELEASES = [
     {
+        "mark": "Mk II.41",
+        "date": "2026-09-05",
+        "headline": "Getting in, and staying in",
+        "items": [
+            "The PIN on the lock screen works. It never did, which in the app "
+            "meant there was no way in at all.",
+            "The passkey button is hidden where a passkey cannot happen, "
+            "instead of sitting there doing nothing.",
+            "Working keeps you signed in. You are only asked again after you "
+            "have actually stopped for a while.",
+        ],
+    },
+    {
         "mark": "Mk II.40",
         "date": "2026-09-04",
         "headline": "A nudge on Friday",

@@ -2653,6 +2653,29 @@ still stuck on the humidity drift</pre>
     look. Both need push, and push needs Firebase.
   </p>
 
+  <h2>Passkeys do not work here</h2>
+  <p>
+    WebAuthn needs a browser or a native Credential Manager bridge, and a plain
+    Android WebView is neither. Inside the shell a passkey simply cannot happen,
+    so <strong>the PIN is the way in</strong> and must be set before anyone
+    installs the app.
+  </p>
+  <p>
+    The interface asks the capability rather than asking whether it is running
+    inside Capacitor — <code>isUserVerifyingPlatformAuthenticatorAvailable</code>
+    — because the answer is the same for any browser without a platform
+    authenticator, and that is the honest question. Where it comes back false the
+    passkey button is hidden on both the lock screen and the re-auth sheet, the
+    PIN is promoted to the primary action, and a line says why. A button that
+    does nothing reads as a broken app rather than as the wrong door.
+  </p>
+  <div class="callout note">
+    <span class="label">Note</span>
+    Adding a native passkey plugin is possible and is not done. The PIN is
+    sufficient, and every plugin in the shell is a thing that can break on an
+    Android update.
+  </div>
+
   <h2>What it is honest about</h2>
   <p>
     The shell runs on Capacitor's <code>server.url</code>, which Capacitor's own
@@ -2917,6 +2940,10 @@ still stuck on the humidity drift</pre>
         <td>Enter sends only where a Shift key exists. The composer is disabled while a request is in flight and the field is cleared before it leaves.</td></tr>
     <tr><td>The send button became the stop button, and the box is cleared the moment a message goes. So pressing Stop ran the browser's own validation on an empty <code>required</code> field, which refused the submit and showed "Please fill out this field". The handler never ran, the answer carried on writing itself, and the button did nothing. Every test passed; only a browser could find it.</td>
         <td>The form is <code>novalidate</code> and emptiness is checked in the handler. A test asserts both, and the flow is driven in a real browser on every change.</td></tr>
+    <tr><td>The PIN button on the lock screen was wired to nothing: no field, no handler, no request. It rendered from the day the PIN was added and nobody pressed it, because the passkey above it worked. Inside the native shell, where a passkey cannot happen, it was the only way in and it did nothing — the lock screen was a dead end.</td>
+        <td>A field, a handler and a request, and a test that drives the whole flow in a browser with <code>PublicKeyCredential</code> deleted, which is the WebView condition.</td></tr>
+    <tr><td>The re-auth window was measured from the moment of unlock, not from the last thing he did, so half an hour of solid work ended in a sheet telling him he had "been idle a while". On a browser that cost a fingerprint; in the app it costs typing a PIN, which is why it got reported.</td>
+        <td>The window slides on writes, so it is the idle window the interface always claimed it was. Never on reads: a page reloading itself while a transcription runs is a poll, not a person, and sliding on that would hold an unattended phone open for as long as the job took.</td></tr>
     <tr><td>Chat had no memory. Every turn was answered cold, so a follow-up had nothing to follow and the same question twice produced two unrelated essays.</td>
         <td>The last twelve turns go into the prompt, and the same words inside twenty seconds return what was already said.</td></tr>
     <tr><td>The installer ended by saying the pipeline was still the stub while its own environment report, four lines above, showed <code>gemini</code> and a key. The false half was the one written as an instruction.</td>

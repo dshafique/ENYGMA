@@ -66,3 +66,31 @@ export async function unlock(say) {
     },
   });
 }
+
+/* Whether a passkey can happen here at all.
+ *
+ * Inside the native shell it cannot. WebAuthn needs the browser or a native
+ * Credential Manager bridge, and a plain Android WebView is neither, so
+ * navigator.credentials.get() there fails in a way that looks to him exactly
+ * like a button that does nothing. Two separate screens offered that button as
+ * the primary action and both were dead in the app.
+ *
+ * Asked as a capability rather than "am I in Capacitor", because the answer is
+ * the same for any browser without a platform authenticator and the question is
+ * the honest one. Cached: the answer cannot change while the page is open.
+ */
+let _can = null;
+export function passkeysWork() {
+  if (_can) return _can;
+  _can = (async () => {
+    try {
+      if (!window.PublicKeyCredential) return false;
+      const ask = PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable;
+      if (typeof ask !== "function") return false;
+      return await ask.call(PublicKeyCredential);
+    } catch (e) {
+      return false;
+    }
+  })();
+  return _can;
+}

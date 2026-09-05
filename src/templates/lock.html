@@ -18,7 +18,21 @@
 
     {% if enrolled %}
       <button class="btn wide" id="unlock" {% if lockout %}disabled{% endif %}>Unlock with passkey</button>
-      {% if has_pin %}<button class="btn ghost wide" id="pin">Use PIN instead</button>{% endif %}
+      {% if has_pin %}
+      <button class="btn ghost wide" id="pin">Use PIN instead</button>
+      <div id="pinbox" hidden>
+        <div class="spread">
+          <input class="pinfield mono" id="pinval" type="password"
+                 inputmode="numeric" autocomplete="one-time-code" placeholder="PIN"
+                 aria-label="PIN">
+          <button class="btn" id="pingo">Unlock</button>
+        </div>
+      </div>
+      {% endif %}
+      {# Shown only where a passkey cannot happen -- see the script below. #}
+      <p class="dim" id="nopasskey" hidden style="max-width:320px;font-size:13px">
+        This app cannot use passkeys. That is Android, not a fault: a passkey
+        needs a browser, and this is an app. Your PIN is the way in here.</p>
       <button class="btn ghost wide" id="usecode">Set up this device</button>
       <div id="codebox" hidden>
         <p class="dim" style="max-width:340px;font-size:13px">
@@ -36,6 +50,10 @@
     {% else %}
       <button class="btn wide" id="create">Create your passkey</button>
       <p class="dim" style="max-width:320px">No device is enrolled yet. This is the first one.</p>
+      <p class="dim" id="nopasskey" hidden style="max-width:320px;font-size:13px">
+        A passkey cannot be created inside this app, only in a browser. Open
+        <span class="mono">enygma.arkhm.io</span> in Chrome, enrol there, then
+        come back and use your PIN.</p>
     {% endif %}
 
     <p class="label" style="margin-top:32px">No password exists in this product</p>
@@ -43,8 +61,21 @@
 </main>
 
 <script type="module">
-import { enrol, unlock } from "/static/js/passkey.js?v={{ build }}";
+import { enrol, unlock, passkeysWork } from "/static/js/passkey.js?v={{ build }}";
 const msg = document.getElementById("msg");
+
+/* A passkey button that cannot work is worse than no button: it looks like the
+   app is broken rather than like the wrong door. Inside the native shell
+   WebAuthn is simply not there, so the PIN becomes the way in and says so. */
+passkeysWork().then((ok) => {
+  if (ok) return;
+  const note = document.getElementById("nopasskey");
+  if (note) note.hidden = false;
+  const passkey = document.getElementById("unlock") || document.getElementById("create");
+  if (passkey) passkey.hidden = true;
+  const pin = document.getElementById("pin");
+  if (pin) { pin.className = "btn wide"; pin.textContent = "Enter PIN"; pin.click(); }
+}).catch(() => {});
 const say = (t, bad) => { msg.textContent = t; msg.className = "msg " + (bad ? "danger" : "dim"); };
 
 document.getElementById("create")?.addEventListener("click", async () => {
@@ -97,6 +128,48 @@ async function redeem() {
 document.getElementById("codego")?.addEventListener("click", redeem);
 document.getElementById("codeval")?.addEventListener("keydown",
   (e) => { if (e.key === "Enter") redeem(); });
+
+/* The PIN, on the lock screen.
+ *
+ * This button rendered from the day the PIN was added and was wired to nothing:
+ * no field, no handler, no request. On a browser it did not matter, because the
+ * passkey above it worked and nobody pressed the second button. In the native
+ * shell the passkey cannot work, so this was the only way in and it was a
+ * button that did nothing -- the lock screen was a dead end and the app looked
+ * broken.
+ */
+const pinbox = document.getElementById("pinbox");
+document.getElementById("pin")?.addEventListener("click", () => {
+  if (!pinbox) return;
+  pinbox.hidden = false;
+  document.getElementById("pinval").focus();
+});
+
+async function byPin() {
+  const field = document.getElementById("pinval");
+  const value = (field?.value || "").trim();
+  if (!value) { say("Enter your PIN", true); field?.focus(); return; }
+  try {
+    const res = await fetch("/auth/pin/verify", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ pin: value }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw { status: res.status, data };
+    location.href = "/";
+  } catch (e) {
+    if (e.status === 429) {
+      say(`Locked for ${e.data?.detail?.lockout ?? "a few"} seconds`, true);
+    } else {
+      say("That PIN did not match", true);
+    }
+    field.value = "";
+    field.focus();
+  }
+}
+document.getElementById("pingo")?.addEventListener("click", byPin);
+document.getElementById("pinval")?.addEventListener("keydown",
+  (e) => { if (e.key === "Enter") byPin(); });
 
 document.getElementById("unlock")?.addEventListener("click", async () => {
   try { await unlock(say); location.href = "/"; }

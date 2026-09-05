@@ -918,3 +918,70 @@ def test_the_friday_reminder_is_scheduled_from_one_source_of_truth():
     # One id, so a launch replaces rather than stacks.
     assert block.count("id: 4073") == 1
     assert "isNativePlatform" in block, "a browser tab would be asked for permission"
+
+
+# ------------------------------------------------- getting in, and staying in
+
+def test_the_lock_screen_pin_is_wired_to_something():
+    """The bug that made the app a dead end. The PIN button rendered from the
+    day the PIN was added and was connected to nothing: no field, no handler, no
+    request. On a browser nobody noticed, because the passkey above it worked.
+    In the native shell a passkey cannot happen, so this was the only way in and
+    it did nothing at all."""
+    page = (pathlib.Path(__file__).resolve().parent.parent
+            / "src/templates/lock.html").read_text()
+    assert 'id="pinbox"' in page, "there is no PIN field on the lock screen"
+    assert 'id="pinval"' in page and 'id="pingo"' in page
+    assert '/auth/pin/verify' in page, "the PIN is not sent anywhere"
+    # And the button that reveals it is listened to.
+    assert 'getElementById("pin")?.addEventListener' in page
+
+
+def test_a_passkey_button_is_hidden_where_a_passkey_cannot_happen():
+    """A button that does nothing reads as a broken app rather than as the wrong
+    door. Asked as a capability, not as "am I in Capacitor", because the answer
+    is the same for any browser with no platform authenticator."""
+    keys = (pathlib.Path(__file__).resolve().parent.parent
+            / "src/static/js/passkey.js").read_text()
+    assert "export function passkeysWork" in keys
+    assert "isUserVerifyingPlatformAuthenticatorAvailable" in keys
+
+    page = (pathlib.Path(__file__).resolve().parent.parent
+            / "src/templates/lock.html").read_text()
+    assert "passkeysWork()" in page
+    assert 'id="nopasskey"' in page, "nothing explains why the passkey is gone"
+
+    js = (pathlib.Path(__file__).resolve().parent.parent
+          / "src/static/js/app.js").read_text()
+    assert "passkeysWork" in js, "the re-auth sheet still leads with a dead button"
+
+
+def test_working_keeps_the_session_alive():
+    """The window was measured from the unlock, not from the last thing he did,
+    so half an hour of solid work ended in a sheet saying he had been idle."""
+    import time
+    from src.auth import session
+    c = client(True)
+    stale = session.issue(verified_at=time.time() - 25 * 60)
+    c.cookies.set(session.cookie_name(), stale)
+
+    before = session.read(stale)["verified_at"]
+    r = c.post("/backlog", json={"text": "still here", "kind": "bug"})
+    assert r.status_code < 400
+    issued = r.cookies.get(session.cookie_name())
+    assert issued, "a write did not slide the window"
+    assert session.read(issued)["verified_at"] > before
+
+
+def test_reading_does_not_keep_the_session_alive():
+    """A page that reloads itself while a transcription runs is a poll, not a
+    person. Sliding on that would hold an unattended phone open for as long as
+    the job took, which is the exact case the window exists for."""
+    import time
+    from src.auth import session
+    c = client(True)
+    stale = session.issue(verified_at=time.time() - 25 * 60)
+    c.cookies.set(session.cookie_name(), stale)
+    r = c.get("/meetings")
+    assert r.status_code == 200
+    assert not r.cookies.get(session.cookie_name()), "a read slid the window"

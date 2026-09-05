@@ -66,6 +66,26 @@ function reauth() {
 
     scrim.hidden = false;
     $("#reauth-go").focus();
+
+    /* Inside the native shell a passkey cannot happen, so offering it as the
+       primary action is offering a button that does nothing. Asked as a
+       capability rather than "am I in the app", because the answer is the same
+       for any browser without a platform authenticator.
+
+       Resolved after the sheet is already up: it is one promise and waiting on
+       it would hold the sheet back for no reason on the common path. */
+    import(`/static/js/passkey.js${V}`).then(async ({ passkeysWork }) => {
+      if (await passkeysWork()) return;
+      const go = $("#reauth-go"), pin = $("#reauth-pin");
+      const said = $("#reauth-said");
+      go.hidden = true;
+      pin.className = "btn";                       // now the primary action
+      pin.textContent = "Enter PIN";
+      if (said) said.textContent = "You have been idle a while. This one action "
+        + "needs your PIN. Nothing you were doing is lost.";
+      $("#reauth-pinbox").hidden = false;
+      $("#reauth-pinval").focus();
+    }).catch(() => {});
   });
 }
 

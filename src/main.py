@@ -87,7 +87,32 @@ def require_session(request: Request) -> dict:
         raise HTTPException(status_code=401, detail={"reason": "locked"})
     if not state["fresh"]:
         raise HTTPException(status_code=401, detail={"reason": "stale"})
+    # Doing something is proof he is still there. The window slides on the way
+    # out -- see slide_the_window below.
+    request.state.slide = True
     return state
+
+
+@app.middleware("http")
+async def slide_the_window(request: Request, call_next):
+    """Keep a session alive while it is being used.
+
+    The window was measured from the moment he unlocked, never from the last
+    thing he did, so a session went stale after thirty minutes of solid work and
+    the sheet told him he had "been idle a while" while he was in the middle of
+    typing. On a browser that cost a fingerprint. In the native shell, where a
+    passkey cannot happen, it costs typing a PIN, which is why he noticed.
+
+    So it is an idle window now, which is what the interface always claimed it
+    was. It slides on writes only, never on reads. A page that reloads itself
+    while a transcription runs is a poll, not a person, and sliding on that
+    would keep an unattended phone unlocked for as long as the job took --
+    which is precisely the case the window exists for.
+    """
+    response = await call_next(request)
+    if getattr(request.state, "slide", False) and response.status_code < 400:
+        session.set_on(response, session.issue())
+    return response
 
 
 def require_view(request: Request) -> dict:
