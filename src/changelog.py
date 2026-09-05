@@ -29,6 +29,16 @@ UNRELEASED = "UNRELEASED"
 
 RELEASES = [
     {
+        "mark": "Mk II.42",
+        "date": "2026-09-05",
+        "headline": "Your fingerprint works in the app",
+        "items": [
+            "Passkeys work inside the installed app now, not just in a browser, "
+            "so you can unlock with your fingerprint again.",
+            "The PIN still works and is still there if the fingerprint is not.",
+        ],
+    },
+    {
         "mark": "Mk II.41",
         "date": "2026-09-05",
         "headline": "Getting in, and staying in",

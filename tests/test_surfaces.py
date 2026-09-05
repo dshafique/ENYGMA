@@ -985,3 +985,69 @@ def test_reading_does_not_keep_the_session_alive():
     r = c.get("/meetings")
     assert r.status_code == 200
     assert not r.cookies.get(session.cookie_name()), "a read slid the window"
+
+
+def test_the_shell_notes_say_when_a_rebuild_is_actually_needed():
+    """The whole point of server.url is that a deploy reaches the phone without
+    one. Forgetting which changes are the exception is how a plugin gets called
+    that the installed APK does not have, and the button does nothing."""
+    notes = (pathlib.Path(__file__).resolve().parent.parent
+             / "native/capacitor/README.md").read_text()
+    assert "When does the APK need rebuilding?" in notes
+    assert "versionCode" in notes
+    for needs in ("plugin", "AndroidManifest", "icon"):
+        assert needs in notes
+
+
+def test_the_asset_links_file_vouches_for_the_app_by_name_and_fingerprint():
+    """A passkey belongs to a domain, not to an app. Android lets the app use
+    this domain's passkeys only if the domain says so here, matched on both the
+    package name and the certificate the APK was signed with."""
+    from src.config import config
+    was = (config.ANDROID_PACKAGE, config.ANDROID_FINGERPRINT)
+    config.ANDROID_PACKAGE = "io.arkhm.enygma"
+    config.ANDROID_FINGERPRINT = "d9:0e:f3:bc"
+    try:
+        r = client().get("/.well-known/assetlinks.json")
+        assert r.status_code == 200, "no session should be needed; it is a public file"
+        assert r.headers["content-type"].startswith("application/json")
+        [entry] = r.json()
+        assert entry["target"]["package_name"] == "io.arkhm.enygma"
+        # Android compares upper case.
+        assert entry["target"]["sha256_cert_fingerprints"] == ["D9:0E:F3:BC"]
+        assert "delegate_permission/common.get_login_creds" in entry["relation"], \
+            "without this relation the passkey sheet finds nothing"
+    finally:
+        config.ANDROID_PACKAGE, config.ANDROID_FINGERPRINT = was
+
+
+def test_no_android_app_means_no_asset_links_file():
+    """Vouching for nothing is worse than saying nothing."""
+    from src.config import config
+    was = (config.ANDROID_PACKAGE, config.ANDROID_FINGERPRINT)
+    config.ANDROID_PACKAGE = config.ANDROID_FINGERPRINT = ""
+    try:
+        assert client().get("/.well-known/assetlinks.json").status_code == 404
+    finally:
+        config.ANDROID_PACKAGE, config.ANDROID_FINGERPRINT = was
+
+
+def test_the_native_passkey_path_does_not_touch_the_browser_conversions():
+    """The server speaks base64url JSON both ways; the ArrayBuffer dance exists
+    only because navigator.credentials demands it. Passing the server's own JSON
+    through leaves nothing to get subtly wrong in the encoding."""
+    keys = (pathlib.Path(__file__).resolve().parent.parent
+            / "src/static/js/passkey.js").read_text()
+    assert "CapacitorPasskey" in keys
+    # Just the native branch: from the bridge check to where it returns. The
+    # browser fallback below it is allowed to convert -- that is its whole job.
+    for call in ("createCredential", "getCredential"):
+        at = keys.index(call)
+        opened = keys.rindex("const bridge = await native();", 0, at)
+        closed = keys.index("return;", at)
+        branch = keys[opened:closed]
+        assert call in branch
+        assert "b64urlToBuf" not in branch, f"{call} converts what it should pass through"
+        assert "bufToB64url" not in branch, f"{call} converts what it should pass through"
+    assert "if (await native()) return true;" in keys, \
+        "the button stays hidden even where the bridge could answer"

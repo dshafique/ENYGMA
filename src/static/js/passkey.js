@@ -19,9 +19,47 @@ async function post(url, body) {
   return data;
 }
 
+/* The native bridge.
+ *
+ * A plain Android WebView has no WebAuthn, which made the passkey button dead
+ * inside the shell. The plugin hands the page Android's Credential Manager, so
+ * the same passkeys work there as in a browser.
+ *
+ * Not a navigator.credentials shim. The server already speaks base64url JSON in
+ * both directions -- the ArrayBuffer conversion below exists only because the
+ * browser API demands it -- so the native path passes the server's own JSON
+ * straight through and skips both conversions. Less code, and nothing to get
+ * subtly wrong in the encoding.
+ */
+async function native() {
+  const cap = window.Capacitor;
+  if (!cap || !cap.isNativePlatform || !cap.isNativePlatform()) return null;
+  const plugin = (cap.Plugins || {}).CapacitorPasskey;
+  if (!plugin) return null;
+  try {
+    const out = await plugin.isSupported();
+    // A phone with no screen lock has Credential Manager and nothing in it.
+    return (out && (out.isSupported ?? out.supported)) ? plugin : null;
+  } catch (e) {
+    return null;
+  }
+}
+
 export async function enrol(deviceName, say) {
   const opts = await post("/auth/register/options");
   const token = opts.challengeToken;
+
+  const bridge = await native();
+  if (bridge) {
+    say("Reading");
+    const { challengeToken, ...publicKey } = opts;
+    const made = await bridge.createCredential({ publicKey });
+    await post("/auth/register/verify", {
+      challengeToken: token, deviceName, credential: made.credential || made,
+    });
+    return;
+  }
+
   opts.challenge = b64urlToBuf(opts.challenge);
   opts.user.id = b64urlToBuf(opts.user.id);
   (opts.excludeCredentials || []).forEach((c) => (c.id = b64urlToBuf(c.id)));
@@ -46,6 +84,18 @@ export async function enrol(deviceName, say) {
 export async function unlock(say) {
   const opts = await post("/auth/login/options");
   const token = opts.challengeToken;
+
+  const bridge = await native();
+  if (bridge) {
+    say("Reading");
+    const { challengeToken, ...publicKey } = opts;
+    const got = await bridge.getCredential({ publicKey });
+    await post("/auth/login/verify", {
+      challengeToken: token, credential: got.credential || got,
+    });
+    return;
+  }
+
   opts.challenge = b64urlToBuf(opts.challenge);
   (opts.allowCredentials || []).forEach((c) => (c.id = b64urlToBuf(c.id)));
   say("Reading");
@@ -83,6 +133,10 @@ let _can = null;
 export function passkeysWork() {
   if (_can) return _can;
   _can = (async () => {
+    // The shell, with the bridge installed, can do this even though the WebView
+    // around it cannot. Asked first, because the browser check below would say
+    // no and hide a button that works.
+    if (await native()) return true;
     try {
       if (!window.PublicKeyCredential) return false;
       const ask = PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable;

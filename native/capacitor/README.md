@@ -17,6 +17,34 @@ to know which it got.
 
 ---
 
+## When does the APK need rebuilding?
+
+Almost never. The shell loads `https://enygma.arkhm.io`, so everything that
+lives in the web app reaches his phone the moment you deploy to the Spark. He
+force-closes and reopens; that is the whole update.
+
+**No rebuild** — pages, routes, CSS, JavaScript, Python, templates, the
+changelog, prompts, the pipeline. This is nearly everything.
+
+**Rebuild** — only when the shell itself changes:
+
+  * a Capacitor plugin is added or removed
+  * `AndroidManifest.xml` changes: a permission, the orientation, a service type
+  * the icon, the app name, the splash
+  * `capacitor.config.json`
+  * bumping `versionCode` to ship any of the above
+
+Of the first forty releases, two needed one.
+
+The trap is a change that spans both: web code that calls a plugin the installed
+APK does not have. The button appears and does nothing. When that happens the
+two have to ship together, web first -- so the deploy notes should say which
+kind of release it is rather than leaving it to be remembered.
+
+Bump `versionCode` in `android/app/build.gradle` before every APK you send him.
+Android silently refuses to install one whose `versionCode` is not higher than
+what is already there, and "silently" is the word that matters.
+
 ## Build it
 
 Needs Node and Android Studio, which the `phntm-twa` setup already put on this
@@ -28,6 +56,7 @@ machine. From this folder:
     npm install @capgo/capacitor-audio-recorder@latest
     npm install @capawesome-team/capacitor-android-foreground-service@latest
     npm install @capacitor/local-notifications@latest
+    npm install @capgo/capacitor-passkey@latest
 
     npx cap add android
     npx cap sync
@@ -80,6 +109,46 @@ installed package, and the old web manifest claimed `"any"`, which is an
 explicit "I handle every orientation" and overrides the lock. If you ever want it
 pinned regardless of the phone, that is `"portrait"` here, not in the web
 manifest.
+
+## Passkeys
+
+A plain WebView has no WebAuthn, which is why the passkey button was dead in the
+first build and the PIN carried the whole load. `@capgo/capacitor-passkey` hands
+the page Android's Credential Manager, so the same passkeys work here as in a
+browser and Yahya gets his fingerprint back.
+
+Two halves, and both are required or the sheet opens and finds nothing:
+
+**The app side** is the plugin. Its build hook writes the `asset_statements`
+metadata into the native project during `cap sync`, so there is nothing to edit
+by hand.
+
+**The domain side** is `https://enygma.arkhm.io/.well-known/assetlinks.json`,
+which is the domain vouching for the app. ENYGMA serves it from two settings in
+the `.env`:
+
+    ENYGMA_ANDROID_PACKAGE=io.arkhm.enygma
+    ENYGMA_ANDROID_FINGERPRINT=<SHA-256 of the release signing certificate>
+
+Get the fingerprint with:
+
+    keytool -list -v -keystore enygma.keystore -alias enygma
+
+It is public -- it is inside every APK handed out, and its entire job is to be
+checked by a stranger. The password is not, and is never needed for this.
+
+Both empty means the file 404s rather than vouching for nothing, which is the
+right answer for an install with no Android build.
+
+**Sign every APK with the same key.** Change the key and the fingerprint no
+longer matches, the domain stops vouching for the app, and every passkey on it
+stops working at once.
+
+The web app does not shim `navigator.credentials`. The server already speaks
+base64url JSON in both directions, so the native path passes the server's own
+JSON straight to the plugin and its answer straight back -- see
+`src/static/js/passkey.js`. The PIN keeps working either way, so a plugin that
+misbehaves is an annoyance rather than a lockout.
 
 ## The Friday reminder
 

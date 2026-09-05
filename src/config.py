@@ -55,6 +55,16 @@ class Config:
     # zone, which on a home server is the operator's. Override if they differ.
     TZ = os.environ.get("ENYGMA_TZ", "").strip()
 
+    # The Android app, for Digital Asset Links. A passkey on Android is bound to
+    # a domain, and the app is allowed to use that domain's passkeys only if the
+    # domain vouches for the app -- which is what /.well-known/assetlinks.json
+    # says. The fingerprint is the release signing certificate's SHA-256, which
+    # is public: it is in every APK handed out. Empty means no app is vouched
+    # for and the file is not served, which is the right answer for an install
+    # that has no Android build.
+    ANDROID_PACKAGE = os.environ.get("ENYGMA_ANDROID_PACKAGE", "").strip()
+    ANDROID_FINGERPRINT = os.environ.get("ENYGMA_ANDROID_FINGERPRINT", "").strip()
+
     REAUTH_MINUTES = int(os.environ.get("ENYGMA_REAUTH_MINUTES", "30"))
     INSECURE_COOKIES = os.environ.get("ENYGMA_INSECURE_COOKIES", "0") == "1"
 

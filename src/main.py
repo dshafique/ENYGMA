@@ -192,6 +192,33 @@ def service_worker():
                                  "Service-Worker-Allowed": "/"})
 
 
+@app.get("/.well-known/assetlinks.json")
+def asset_links():
+    """Which Android app is allowed to use this domain's passkeys.
+
+    A passkey belongs to a domain, not to an app. Android will only let the app
+    use enygma.arkhm.io's passkeys if this file says the app is the domain's --
+    matched by package name and by the SHA-256 of the certificate the APK was
+    signed with. Without it the passkey sheet appears and finds nothing.
+
+    Public by design: no session, and the fingerprint is not a secret. It is in
+    every APK that is handed out, and its whole job is to be checked by a
+    stranger. Unset means no Android app is vouched for, and saying that with a
+    404 is more honest than serving an empty list.
+    """
+    if not (config.ANDROID_PACKAGE and config.ANDROID_FINGERPRINT):
+        raise HTTPException(status_code=404, detail="No Android app is registered")
+    return JSONResponse([{
+        "relation": ["delegate_permission/common.handle_all_urls",
+                     "delegate_permission/common.get_login_creds"],
+        "target": {
+            "namespace": "android_app",
+            "package_name": config.ANDROID_PACKAGE,
+            "sha256_cert_fingerprints": [config.ANDROID_FINGERPRINT.upper()],
+        },
+    }], media_type="application/json")
+
+
 @app.get("/manifest.webmanifest")
 def manifest():
     return FileResponse(HERE / "static/manifest.webmanifest",
