@@ -24,11 +24,28 @@
     <h1>Action items</h1>
     <p class="sub">
       {{ data.open|length }} open · {{ data.pending|length }} pending ·
-      {{ data.done|length }} done · {{ data.rejected|length }} rejected</p>
+      {{ data.done|length }} done · {{ data.rejected|length }} rejected
+      {%- if data.who %} · {{ data.who }}{% endif %}</p>
   </div>
 </header>
 
 <div class="page measure">
+  {% if data.all_total %}
+  <div class="benchfilters">
+    <a class="chip{{ ' on' if not data.who }}" href="/actions">All
+      <span class="n">{{ data.all_total }}</span></a>
+    {% for key, label in whos %}
+    <a class="chip{{ ' on' if data.who == key }}" href="/actions?who={{ key }}">{{ label }}
+      <span class="n">{{ data.tally[key] }}</span></a>
+    {% endfor %}
+  </div>
+  {% if not data.knows_him %}
+  <p class="dim" style="font-size:13px;margin:0 0 var(--space-20)">
+    ENYGMA does not know which of these people is you, so <em>Mine</em> is only
+    showing what nobody else owns. Set <span class="mono">ENYGMA_OWNER_NAME</span>
+    to the name you gave yourself in the Directory.</p>
+  {% endif %}
+  {% endif %}
   {% if data.total %}
     {% for key, label, empty in [
          ('open',     'Open',     'Nothing open.'),
@@ -45,6 +62,9 @@
         <p class="dim" style="font-size:14px">{{ empty }}</p></div>
       {% endif %}
     {% endfor %}
+  {% elif data.who %}
+    <div class="empty"><div class="cell"></div>
+      <p>Nothing under {{ data.who }}. <a href="/actions">Show everything</a>.</p></div>
   {% else %}
     <div class="empty"><div class="cell"></div>
       <p>Nothing here. Actions are pulled out of each meeting when it is

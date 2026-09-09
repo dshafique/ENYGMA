@@ -9,6 +9,7 @@ glossary hit is still returned, because that is real knowledge the app has.
 """
 from .db import cursor
 from . import glossary, library, documents, voice, models, attachments, spend
+from . import grounding
 from .config import config
 
 NO_MODEL = (
@@ -375,7 +376,8 @@ VOICE = (
     "it is important to note, I hope this helps.\n"
     "Technical words are not the problem and must not be avoided. I2C, "
     "MOSFET, pull-up resistor and the rest are the substance. Cut the "
-    "management vocabulary, never the engineering."
+    "management vocabulary, never the engineering.\n\n"
+    + grounding.NEVER_INVENT
 )
 
 

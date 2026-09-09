@@ -22,6 +22,16 @@ import re
 from pathlib import Path
 
 from ..config import config
+from ..grounding import NEVER_INVENT
+
+
+def _grounded(prompt: str) -> str:
+    """Put the shared truthfulness clause into a prompt.
+
+    Substituted rather than interpolated: every prompt here is mostly a JSON
+    shape, and an f-string would try to read those braces as format fields.
+    """
+    return prompt.replace("<<GROUNDING>>", NEVER_INVENT)
 from .base import Backend, Segment, Transcript, Summary
 from . import chunking, stitch
 
@@ -37,6 +47,8 @@ Rules:
 - Start a new segment whenever the speaker changes.
 - Transcribe what was said, including false starts. Do not summarise or tidy.
 - If a passage is inaudible, write [inaudible] rather than inventing words.
+
+<<GROUNDING>>
 """
 
 SUMMARISE_PROMPT = """Here is a speaker-attributed transcript of a meeting.
@@ -80,8 +92,10 @@ Timestamps:
   smaller loss than a missing action, and this rule used to be the other way
   round, which quietly deleted about half of every meeting.
 
-Never invent. An empty array is right when nothing of that kind happened, but
-"I could not timestamp it" is not the same as "it did not happen".
+<<GROUNDING>>
+
+An empty array is right when nothing of that kind happened, but "I could not
+timestamp it" is not the same as "it did not happen".
 
 TRANSCRIPT:
 """
@@ -112,6 +126,8 @@ Rules:
   here would be a fabrication.
 - Use only what the notes say. If the notes do not cover something, leave the
   array empty rather than filling it in from what is likely.
+
+<<GROUNDING>>
 
 NOTES:
 """
@@ -170,6 +186,11 @@ TRANSCRIPT_SCHEMA = {
     },
     "required": ["segments"],
 }
+
+TRANSCRIBE_PROMPT = _grounded(TRANSCRIBE_PROMPT)
+SUMMARISE_PROMPT = _grounded(SUMMARISE_PROMPT)
+NOTES_PROMPT = _grounded(NOTES_PROMPT)
+
 
 _ITEM = {
     "type": "object",

@@ -631,10 +631,12 @@ def library_search(q: str, request: Request):
 # action items, directory, settings
 # --------------------------------------------------------------------------
 @app.get("/actions", response_class=HTMLResponse)
-def actions_page(request: Request):
+def actions_page(request: Request, who: str | None = None):
     if current(request) is None:
         return RedirectResponse("/lock", status_code=302)
-    return page(request, "actions.html", "actions", {"data": actions_repo.listing()})
+    return page(request, "actions.html", "actions",
+                {"data": actions_repo.listing(who=who),
+                 "whos": actions_repo.WHO})
 
 
 @app.get("/directory", response_class=HTMLResponse)

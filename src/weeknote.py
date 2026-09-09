@@ -26,7 +26,7 @@ import json
 import re
 from datetime import date, datetime, timedelta
 
-from . import voice
+from . import voice, grounding
 from .db import cursor
 from .config import config
 
@@ -48,6 +48,8 @@ How to write:
   * Explain the thing itself, the way you would to a friend who is not on the team.
 
 {NEVER}
+
+{grounding.NEVER_INVENT}
 
 Between three and five bullets per section. Each one a fact he could be asked
 about. If there is not enough real material for three, write fewer."""
@@ -285,7 +287,9 @@ an empty list for "next" rather than making one up.
 
 At most five bullets in each list. Fewer is fine.
 
-{NEVER}"""
+{NEVER}
+
+{grounding.NEVER_INVENT}"""
 
 
 # Sentence enders, and then commas, but only for a wall of text with no line

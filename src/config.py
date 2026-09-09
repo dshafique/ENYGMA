@@ -65,6 +65,12 @@ class Config:
     ANDROID_PACKAGE = os.environ.get("ENYGMA_ANDROID_PACKAGE", "").strip()
     ANDROID_FINGERPRINT = os.environ.get("ENYGMA_ANDROID_FINGERPRINT", "").strip()
 
+    # Which person in the Directory is him. Every action item carries an owner,
+    # and without knowing which one is his, "what do I owe anybody" cannot be
+    # answered -- which is the question the Actions tab exists for. Matched
+    # against the name he gave the speaker, so it must be spelled the same way.
+    OWNER_NAME = os.environ.get("ENYGMA_OWNER_NAME", "").strip()
+
     REAUTH_MINUTES = int(os.environ.get("ENYGMA_REAUTH_MINUTES", "30"))
     INSECURE_COOKIES = os.environ.get("ENYGMA_INSECURE_COOKIES", "0") == "1"
 

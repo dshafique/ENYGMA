@@ -342,3 +342,90 @@ def test_the_number_leads_the_line_so_the_column_can_be_scanned():
     css = (pathlib.Path(__file__).resolve().parent.parent
            / "src/static/css/app.css").read_text()
     assert "text-indent: -3.1em" in css, "a wrapped line runs back under the number"
+
+
+# ---------------------------------------------------- mine, theirs, ours
+
+def _seed_actions():
+    """One of his, one of Joseph's, one the team took on together."""
+    from src import db
+    with db.cursor() as conn:
+        conn.execute("INSERT INTO recordings (title, status) VALUES ('LEAF stand up','ready')")
+        rid = conn.execute("SELECT last_insert_rowid() AS i").fetchone()["i"]
+        for label, name in (("SPEAKER 1", "Yahya Shafique"),
+                            ("SPEAKER 2", "Joseph Kudia")):
+            conn.execute("INSERT OR REPLACE INTO speakers (recording_id, label, turns, "
+                         "person_name) VALUES (?, ?, 1, ?)", (rid, label, name))
+        for text, owner in (("Set up the Atlas sensors", "SPEAKER 1"),
+                            ("Build the camera module", "SPEAKER 2"),
+                            ("The team will revisit the metadata design", None)):
+            conn.execute("INSERT INTO action_items (recording_id, text, owner) "
+                         "VALUES (?, ?, ?)", (rid, text, owner))
+    return rid
+
+
+def test_what_is_his_includes_what_the_team_took_on():
+    """A meeting produces a run of commitments the group made together. Those
+    are his to chase as much as anything with his name on it, and a filter that
+    filed them under Theirs would hide half of what he actually owes."""
+    from src import actions
+    from src.config import config
+    _seed_actions()
+    was = config.OWNER_NAME
+    config.OWNER_NAME = "Yahya Shafique"
+    try:
+        mine = actions.listing(who="mine")
+        texts = [a["text"] for a in mine["open"]]
+        assert "Set up the Atlas sensors" in texts
+        assert "The team will revisit the metadata design" in texts
+        assert "Build the camera module" not in texts
+
+        theirs = actions.listing(who="theirs")
+        assert [a["text"] for a in theirs["open"]] == ["Build the camera module"]
+    finally:
+        config.OWNER_NAME = was
+
+
+def test_the_counts_do_not_move_with_the_filter():
+    """This went wrong on the Bench once already. A count that changes when you
+    filter is not a count."""
+    from src import actions
+    from src.config import config
+    was = config.OWNER_NAME
+    config.OWNER_NAME = "Yahya Shafique"
+    try:
+        everything = actions.listing()
+        filtered = actions.listing(who="mine")
+        assert filtered["tally"] == everything["tally"]
+        assert filtered["all_total"] == everything["all_total"]
+        assert filtered["total"] < filtered["all_total"]
+    finally:
+        config.OWNER_NAME = was
+
+
+def test_the_name_is_matched_however_it_is_capitalised():
+    from src import actions
+    from src.config import config
+    was = config.OWNER_NAME
+    config.OWNER_NAME = "yahya shafique"
+    try:
+        assert any(a["text"] == "Set up the Atlas sensors"
+                   for a in actions.listing(who="mine")["open"])
+    finally:
+        config.OWNER_NAME = was
+
+
+def test_without_a_name_it_says_so_rather_than_pretending():
+    """Silently showing him everything under Mine would be a filter that lies."""
+    from src import actions
+    from src.config import config
+    was = config.OWNER_NAME
+    config.OWNER_NAME = ""
+    try:
+        out = actions.listing(who="mine")
+        assert out["knows_him"] is False
+        # Only the unowned ones, which is the honest answer with no name set.
+        assert [a["text"] for a in out["open"]] == \
+            ["The team will revisit the metadata design"]
+    finally:
+        config.OWNER_NAME = was

@@ -29,6 +29,18 @@ UNRELEASED = "UNRELEASED"
 
 RELEASES = [
     {
+        "mark": "Mk II.44",
+        "date": "2026-09-09",
+        "headline": "Yours, theirs, and ours",
+        "items": [
+            "Action items filter to Mine or Theirs. Anything the team took on "
+            "together counts as yours, because it is yours to chase.",
+            "Every part of ENYGMA that writes something you act on now works to "
+            "the same rule: add nothing that was not said, and drop nothing that "
+            "was.",
+        ],
+    },
+    {
         "mark": "Mk II.43",
         "date": "2026-09-09",
         "headline": "Summaries that keep what was said",

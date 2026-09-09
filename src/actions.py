@@ -3,6 +3,7 @@
 The Meetings tab answers "what happened in this one". This answers "what do I owe
 anybody", which is a different question and deserves its own surface.
 """
+from .config import config
 from .db import cursor
 
 # An action item is not a checkbox. Declining something and not having got to it
@@ -26,16 +27,49 @@ _SELECT = (
 )
 
 
-def listing(include_done: bool = True) -> dict:
+# Who owns a thing, from his point of view. "ours" is deliberately grouped with
+# his own: a meeting produces a run of commitments the group made together, and
+# those are his to chase as much as anything with his name on it. A filter that
+# put them under "theirs" would hide half of what he actually owes.
+WHO = (("mine",   "Mine"),
+       ("theirs", "Theirs"))
+
+
+def _is_his(row: dict) -> bool:
+    """His, or the group's. An item with nobody's name on it is not somebody
+    else's -- it is either the team's or nobody has claimed it, and in both
+    cases it is his problem until someone says otherwise."""
+    owner = (row.get("owner_name") or row.get("owner") or "").strip()
+    if not owner:
+        return True
+    mine = config.OWNER_NAME
+    return bool(mine) and owner.casefold() == mine.casefold()
+
+
+def listing(include_done: bool = True, who: str | None = None) -> dict:
     where = "" if include_done else "WHERE a.state = 'open' "
     with cursor() as conn:
         rows = [dict(r) for r in conn.execute(
             _SELECT + where + "ORDER BY r.recorded_at DESC, a.id")]
-    grouped = {state: [r for r in rows if (r["state"] or "open") == state]
+
+    # Counted before the filter, always. A count that moves with the filter is
+    # not a count, and this went wrong once already on the Bench.
+    tally = {key: sum(1 for r in rows if _is_his(r) == (key == "mine"))
+             for key, _ in WHO}
+
+    who = who if who in dict(WHO) else None
+    shown = rows if who is None else [r for r in rows
+                                      if _is_his(r) == (who == "mine")]
+
+    grouped = {state: [r for r in shown if (r["state"] or "open") == state]
                for state in STATES}
-    grouped["total"] = len(rows)
-    # Kept because Home and the tests read these names.
-    grouped["done"] = grouped["done"]
+    grouped["total"] = len(shown)
+    grouped["all_total"] = len(rows)
+    grouped["tally"] = tally
+    grouped["who"] = who
+    # Without a name set, "mine" cannot mean anything and the filter says so
+    # rather than quietly showing him everything.
+    grouped["knows_him"] = bool(config.OWNER_NAME)
     return grouped
 
 

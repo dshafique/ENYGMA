@@ -23,7 +23,7 @@ import io
 import re
 from html import escape
 
-from . import voice
+from . import voice, grounding
 
 # md and html need nothing. The other four are imported where they are used, so
 # a missing wheel takes down one format with a clear message rather than the
@@ -574,6 +574,8 @@ What to produce:
   * Anything with repeating fields goes in a table. A table survives every
     format; a paragraph describing rows does not.
   * Commands, code and file contents go in a code block, never in a paragraph."""
+BRIEF += "\n\n" + grounding.NEVER_INVENT
+
 
 
 # Blocks whose contents are data or code rather than prose. Rewriting the
