@@ -28,29 +28,30 @@
   {% if offers %}
   <div class="offers">
     {% for o in offers %}
-    {# Folded shut. The closed state carries a subject and no instruction at
-       all, so reading one is a decision rather than an accident. #}
-    <details class="offer" data-offer="{{ o.id }}">
-      <summary>
-        <span class="tag">Nobody's</span>
-        <span class="head">{{ o.gap }}</span>
-      </summary>
+    {# Open, with the evidence first and the move second.
+       He can judge whether the gap is real before he reads what to do about it,
+       and where ENYGMA is wrong he sees that it is wrong rather than being told
+       to do something odd for no stated reason.
+
+       Everything that keeps it from reading as an assignment is still here:
+       dashed edge, no state control, outlined buttons, dimmer text, and the
+       move phrased as something he could do rather than an instruction. #}
+    <div class="offer" data-offer="{{ o.id }}">
+      <p class="gap"><span class="tag">Nobody's</span>{{ o.gap }}</p>
+      {% if o.why %}<p class="why">{{ o.why }}</p>{% endif %}
       <div class="offerbody">
-        {% if o.why %}<p class="why">{{ o.why }}</p>{% endif %}
-        {# "You could", never an imperative. Read out of context, over a
-           shoulder, on a lock screen, it still does not tell him to do
-           anything. #}
-        <p class="could">You could {{ o.could[0]|lower }}{{ o.could[1:] }}</p>
-        <p class="cite">
-          {% if o.meeting %}<a href="/meetings/{{ o.recording_id }}">{{ o.meeting }}</a>{% else %}a meeting{% endif %}
-          {%- if o.at_ms is not none %} · {{ o.at_ms|mmss }}{% endif %}</p>
-        <div class="offeract">
-          <button class="btn line sm" data-take="{{ o.id }}">Put it on my list</button>
-          <button class="btn ghost sm" data-pass="{{ o.id }}">Not for me</button>
-          <span class="msg dim" data-msg="{{ o.id }}"></span>
-        </div>
+        <span class="label">You could</span>
+        <p class="could">{{ o.could }}</p>
       </div>
-    </details>
+      <p class="cite">
+        {% if o.meeting %}<a href="/meetings/{{ o.recording_id }}">{{ o.meeting }}</a>{% else %}a meeting{% endif %}
+        {%- if o.at_ms is not none %} · {{ o.at_ms|mmss }}{% endif %}</p>
+      <div class="offeract">
+        <button class="btn line sm" data-take="{{ o.id }}">Put it on my list</button>
+        <button class="btn ghost sm" data-pass="{{ o.id }}">Not for me</button>
+        <span class="msg dim" data-msg="{{ o.id }}"></span>
+      </div>
+    </div>
     {% endfor %}
   </div>
   {% else %}

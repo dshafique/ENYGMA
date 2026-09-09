@@ -196,10 +196,34 @@ def test_the_prompt_refuses_to_give_career_advice():
     assert "Only work that is genuinely unheld" in flat
 
 
-def test_they_are_shut_by_default():
-    """The closed state carries a subject and no argument, so reading one is a
-    decision rather than an accident."""
+def test_the_evidence_comes_before_the_move():
+    """The whole reason for this layout. He judges whether the gap is real
+    before he reads what to do about it, so when ENYGMA is wrong he sees that it
+    is wrong rather than being told to do something odd for no stated reason."""
     page = (pathlib.Path(__file__).resolve().parent.parent
             / "src/templates/suggestions.html").read_text()
-    assert "<details class=\"offer\"" in page
-    assert "<details class=\"offer\" open" not in page
+    body = page[page.index('class="offers"'):]
+    gap = body.index('class="gap"')
+    why = body.index('class="why"')
+    could = body.index('class="could"')
+    assert gap < why < could, "the advice is leading the evidence"
+
+
+def test_nothing_here_looks_like_a_commitment():
+    """An action item is a square row with a state control and a filled button.
+    A suggestion must share none of that, or he will read it as work he owes."""
+    page = (pathlib.Path(__file__).resolve().parent.parent
+            / "src/templates/suggestions.html").read_text()
+    body = page[page.index('class="offers"'):]
+    assert "statepick" not in body and "state-" not in body, "it has a state control"
+    # Every button outlined, never the filled primary the rest of the app uses.
+    for button in ("data-take", "data-pass"):
+        at = body.index(button)
+        opens = body.rindex("<button", 0, at)
+        assert "btn line" in body[opens:at] or "btn ghost" in body[opens:at], \
+            f"{button} is a filled button"
+
+    css = (pathlib.Path(__file__).resolve().parent.parent
+           / "src/static/css/app.css").read_text()
+    rule = css[css.index(".offer {"):css.index(".offer {") + 200]
+    assert "dashed" in rule, "the edge is solid, like every other card"

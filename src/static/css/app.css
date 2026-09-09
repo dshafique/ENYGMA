@@ -556,23 +556,24 @@ h3 { font-size: 15px; font-weight: 600; margin: 0; }
 
 .offers { display: flex; flex-direction: column; gap: var(--space-12); }
 .offer { border: 1px dashed var(--border-strong); border-radius: var(--radius-md);
-         background: transparent; }
-.offer summary { list-style: none; cursor: pointer; padding: var(--space-12) var(--space-16);
-                 display: flex; gap: var(--space-12); align-items: baseline; }
-.offer summary::-webkit-details-marker { display: none; }
-.offer .tag { flex: none; font-family: var(--font-mono); font-size: 10px;
-              letter-spacing: .1em; text-transform: uppercase; color: var(--text-muted); }
-.offer .head { color: var(--text-dim); font-size: 14px; line-height: 21px; }
-.offer[open] .head { color: var(--text); }
-.offerbody { padding: var(--space-12) var(--space-16) var(--space-16);
+         background: transparent; padding: var(--space-20); }
+.offer .tag { font-family: var(--font-mono); font-size: 10px; letter-spacing: .1em;
+              text-transform: uppercase; color: var(--text-muted);
+              margin-right: var(--space-12); }
+/* The gap leads, because the evidence is what makes a guess worth reading. */
+.offer .gap { margin: 0; font-size: 15px; line-height: 23px; color: var(--text); }
+.offer .why { margin: var(--space-8) 0 0; color: var(--text-dim);
+              font-size: 14px; line-height: 21px; }
+/* And the move follows, below a rule, so it reads as the second thing. */
+.offerbody { margin-top: var(--space-16); padding-top: var(--space-12);
              border-top: 1px dashed var(--border-divider); }
-.offerbody .why { margin: 0 0 var(--space-8); color: var(--text-dim); font-size: 14px; }
-.offerbody .could { margin: 0 0 var(--space-8); color: var(--text-muted);
-                    font-size: 13.5px; font-style: italic; }
-.offerbody .cite { margin: 0; font-family: var(--font-mono); font-size: 11px;
-                   color: var(--text-muted); }
+.offerbody .label { display: block; margin-bottom: var(--space-4); }
+.offerbody .could { margin: 0; color: var(--text-muted); font-size: 14px;
+                    font-style: italic; }
+.offer .cite { margin: var(--space-12) 0 0; font-family: var(--font-mono);
+               font-size: 11px; color: var(--text-muted); }
 .offeract { display: flex; gap: var(--space-8); align-items: center;
-            flex-wrap: wrap; margin-top: var(--space-12); }
+            flex-wrap: wrap; margin-top: var(--space-16); }
 .offer.gone { opacity: .45; }
 
 pre.doc {

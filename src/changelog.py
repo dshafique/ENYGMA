@@ -29,15 +29,17 @@ UNRELEASED = "UNRELEASED"
 
 RELEASES = [
     {
-        "mark": "Mk II.45",
+        "mark": "Mk II.46",
         "date": "2026-09-09",
         "headline": "Whose is it, and what nobody has",
         "items": [
             "Action items filter by person. Pick as many as you like, including "
             "the team, so you can see your work and the group's together.",
-            "New: Nobody's. Work the meetings left on the floor, with the moment "
-            "it went unclaimed. Nothing there is assigned to you, and it stays "
-            "off every other screen until you put it on your list.",
+            "New: Nobody's. Work the meetings left on the floor. Each one says "
+            "what went unclaimed and points at the moment, so you can judge it "
+            "before you decide anything.",
+            "Nothing there is assigned to you, and it stays off every other "
+            "screen until you put it on your list.",
         ],
     },
     {
