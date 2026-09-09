@@ -102,9 +102,20 @@ on and is where it belongs.
 Sections 1, 2, 3 and 5 below are automated and idempotent. From your Windows machine:
 
 ```powershell
-scp $HOME\Code\enygma.zip you@spark-4d80:~/
-ssh you@spark-4d80
+scp $HOME\Code\enygma.zip <you>@phntm-spark:~/
+ssh <you>@phntm-spark
 ```
+
+**Fill in `<you>` before running these.** They are written with angle brackets so
+they cannot be pasted as-is: an earlier release was lost for days because a
+literal placeholder username was pasted, the `scp` failed, and five stamped zips
+stacked up unshipped while `healthz` kept answering with the old mark.
+
+**The host is `phntm-spark`, not `spark-4d80`.** `spark-4d80` is the machine's
+own hostname and does not resolve from anywhere else. The name that works off-box
+is the Tailscale one, `phntm-spark` (`100.76.66.87`), and it only works while
+both ends are on the tailnet -- check with `tailscale status` if the name will not
+resolve.
 
 Then on the Spark:
 
