@@ -1,0 +1,12 @@
+-- The meeting, subject by subject.
+--
+-- The summary was an abstract of two or three sentences and nothing between
+-- that and the raw transcript. For someone catching up on a forty minute
+-- meeting that is a gap: the abstract is too thin to rely on and the transcript
+-- is too long to read, so he ends up scrolling the transcript anyway and the
+-- summary earns nothing.
+--
+-- Topics fill it. Each is a heading and a short paragraph on one subject, in
+-- the order the meeting covered them, so the shape of the conversation survives
+-- and he can find the part he cares about without reading all of it.
+ALTER TABLE summaries ADD COLUMN topics TEXT;   -- json array of {heading, text}

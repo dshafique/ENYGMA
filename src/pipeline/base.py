@@ -41,6 +41,7 @@ class Transcript:
 @dataclass
 class Summary:
     abstract: str = ""
+    topics: list[dict] = field(default_factory=list)      # {heading, text}
     decisions: list[dict] = field(default_factory=list)   # {text, at_ms}
     questions: list[dict] = field(default_factory=list)
     actions: list[dict] = field(default_factory=list)     # {text, owner, at_ms}

@@ -105,6 +105,13 @@ class Config:
     # how the interface gets built before the Gemini bill starts.
     PIPELINE = os.environ.get("ENYGMA_PIPELINE", "stub")
     GEMINI_MODEL = os.environ.get("ENYGMA_GEMINI_MODEL", "gemini-3.5-flash")
+    # Summarising is one pass over text; transcription is priced by the length of
+    # the audio. So the expensive-by-nature job stays on the cheap model and the
+    # cheap-by-nature job is allowed a better one, which is the opposite of how
+    # it reads and the right way round for both the bill and the result. Unset
+    # means the same model does both, which is what it used to do.
+    GEMINI_SUMMARY_MODEL = os.environ.get(
+        "ENYGMA_GEMINI_SUMMARY_MODEL", "").strip() or GEMINI_MODEL
     # 20 MB is the documented inline threshold; above it the Files API is required.
     GEMINI_INLINE_LIMIT = 20 * 1024 * 1024
     # A long meeting is a long transcript. The default ceiling is low enough that

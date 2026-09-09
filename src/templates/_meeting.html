@@ -93,6 +93,17 @@
         <p>{{ data.summary.abstract }}</p>
       </div>
     {% endif %}
+    {% if data.summary.topics %}
+      <div class="block topics">
+        <span class="label">What was discussed</span>
+        {% for t in data.summary.topics %}
+        <section class="topic">
+          <h3>{{ t.heading }}</h3>
+          <p>{{ t.text }}</p>
+        </section>
+        {% endfor %}
+      </div>
+    {% endif %}
     {% if data.summary.decisions %}
       <div class="block">
         <span class="label">Decisions</span>
@@ -117,10 +128,15 @@
         {% endfor %}
       </div>
     {% endif %}
-    {% if not data.summary.abstract and not data.summary.decisions and not data.summary.questions %}
+    {% if not data.summary.abstract and not data.summary.topics and not data.summary.decisions and not data.summary.questions %}
       <div class="empty"><div class="cell"></div>
         <p>No summary yet. It is written once the transcript is complete.</p></div>
     {% endif %}
+    <div class="spread" style="margin-top:var(--space-20)">
+      <button class="btn line sm" id="resummarise"
+              data-id="{{ data.recording.id }}">Summarise again</button>
+      <span class="msg dim" id="resummsg"></span>
+    </div>
     {% if data.summary.model %}
       <p class="label">Summarised by {{ data.summary.model }}</p>
     {% endif %}

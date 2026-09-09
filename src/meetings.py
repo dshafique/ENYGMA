@@ -53,7 +53,7 @@ def detail(recording_id: int) -> dict | None:
             "SELECT label, person_name, turns FROM speakers WHERE recording_id = ? ORDER BY label",
             (recording_id,))]
         summary = conn.execute(
-            "SELECT abstract, decisions, questions, model FROM summaries WHERE recording_id = ?",
+            "SELECT abstract, topics, decisions, questions, model FROM summaries WHERE recording_id = ?",
             (recording_id,)).fetchone()
         actions = [dict(r) for r in conn.execute(
             "SELECT id, text, owner, due_date, at_ms, done_at FROM action_items "
@@ -64,6 +64,7 @@ def detail(recording_id: int) -> dict | None:
         "speakers": speakers,
         "summary": {
             "abstract": summary["abstract"] if summary else "",
+            "topics": json.loads(summary["topics"]) if summary and summary["topics"] else [],
             "decisions": json.loads(summary["decisions"]) if summary and summary["decisions"] else [],
             "questions": json.loads(summary["questions"]) if summary and summary["questions"] else [],
             "model": summary["model"] if summary else None,

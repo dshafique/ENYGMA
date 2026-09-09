@@ -899,3 +899,99 @@ def test_a_recording_lands_as_a_meeting_the_pipeline_can_run(tmp_path):
     assert row["mime"] == "audio/ogg"
     assert row["audio_path"].endswith(".ogg")
     assert row["status"] == "queued"
+
+
+# ------------------------------------------------ what the summary keeps
+#
+# A complaint with a comparison attached: his work's tool produced twelve themed
+# sections and twenty-one action items from a stand-up; ENYGMA produced an
+# abstract and four actions. The transcript was fine -- it named all four
+# attendees correctly and the actions it did produce were accurate. The
+# summariser was throwing the rest away on purpose.
+
+
+def test_an_item_with_no_timestamp_is_kept():
+    """The bug, and it was in two places at once. The prompt said "if you cannot
+    point at a moment, leave the item out", and the schema made `at` required so
+    an untimed item was not merely discouraged but structurally invalid.
+
+    Half of any real meeting is commitments that build up over a stretch of talk
+    with no one moment to point at -- "the team will bring this to Thursday".
+    Every one of those was deleted."""
+    from src.pipeline.gemini import SUMMARY_SCHEMA, _ITEM
+    assert _ITEM["required"] == ["text"], "an untimed decision is invalid again"
+    action = SUMMARY_SCHEMA["properties"]["actions"]["items"]
+    assert action["required"] == ["text"], "an untimed action is invalid again"
+
+
+def test_the_prompt_says_to_keep_what_it_cannot_place():
+    from src.pipeline.gemini import SUMMARISE_PROMPT
+    lowered = SUMMARISE_PROMPT.lower()
+    assert "do not drop the item" in lowered
+    assert "leave the item out" not in lowered, "the deleting rule is back"
+
+
+def test_a_commitment_by_the_group_is_an_action():
+    """"The team will revisit the metadata design on Thursday" is an action. It
+    was being dropped for having no individual owner."""
+    from src.pipeline.gemini import SUMMARISE_PROMPT
+    assert "commitment by the group counts" in SUMMARISE_PROMPT
+
+
+def test_the_summary_is_asked_for_the_meeting_subject_by_subject():
+    """Between a three sentence abstract and a forty minute transcript there was
+    nothing, so he read the transcript and the summary earned nothing."""
+    from src.pipeline.gemini import SUMMARISE_PROMPT, SUMMARY_SCHEMA
+    assert "topics" in SUMMARY_SCHEMA["properties"]
+    topic = SUMMARY_SCHEMA["properties"]["topics"]["items"]
+    assert set(topic["required"]) == {"heading", "text"}
+    assert "eight to fifteen" in SUMMARISE_PROMPT, "nothing tells it how many"
+
+
+def test_summarising_uses_its_own_model_and_puts_the_other_one_back():
+    """Transcription is priced by the length of the audio; summarising is one
+    pass over text. So the cheap job is the one allowed the better model, and
+    the swap must not leak into the next transcription."""
+    from src.pipeline.gemini import GeminiBackend
+    from src.pipeline.base import Transcript, Segment
+    from src.config import config
+    was = config.GEMINI_SUMMARY_MODEL
+    config.GEMINI_SUMMARY_MODEL = "gemini-3.5-pro"
+
+    seen = []
+
+    class Fake(GeminiBackend):
+        def _ask(self, parts, schema=None):
+            seen.append(self.model)
+            return '{"abstract":"a","topics":[],"decisions":[],"questions":[],"actions":[]}'
+
+    try:
+        backend = Fake()
+        backend.model = "gemini-3.5-flash"
+        out = backend.summarise(Transcript(segments=[
+            Segment(speaker_label="SPEAKER 1", start_ms=0, end_ms=1, text="hello")]))
+        assert seen == ["gemini-3.5-pro"], "it summarised with the transcription model"
+        assert backend.model == "gemini-3.5-flash", "the swap leaked"
+        assert out.model == "gemini-3.5-pro", "it recorded the wrong model"
+    finally:
+        config.GEMINI_SUMMARY_MODEL = was
+
+
+def test_resummarising_never_touches_the_audio(tmp_path):
+    """Re-transcribing an hour to rewrite a page of text is paying twice."""
+    import inspect
+    from src.pipeline import runner
+    source = inspect.getsource(runner.resummarise)
+    body = source[source.index('"""', source.index('"""') + 3):]   # past the docstring
+    assert ".transcribe(" not in body, "it is re-reading the audio"
+    assert "audio_path" not in body, "it is touching the recording"
+    assert "transcript_segments" in body, "it is not reading the stored transcript"
+
+
+def test_resummarising_keeps_the_actions_he_has_already_dealt_with():
+    """Ticking something off is real work. A better summary must not undo it."""
+    import inspect
+    from src.pipeline import runner
+    source = inspect.getsource(runner.resummarise)
+    assert "state = 'open'" in source and "state_note IS NULL" in source, \
+        "it deletes actions he has closed or turned down"

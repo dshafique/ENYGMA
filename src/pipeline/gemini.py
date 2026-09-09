@@ -43,17 +43,45 @@ SUMMARISE_PROMPT = """Here is a speaker-attributed transcript of a meeting.
 
 Return JSON only, with this exact shape:
 {"abstract":"...",
- "decisions":[{"text":"...","at":"MM:SS"}],
- "questions":[{"text":"...","at":"MM:SS"}],
- "actions":[{"text":"...","owner":"SPEAKER 2 or null","at":"MM:SS"}]}
+ "topics":[{"heading":"...","text":"..."}],
+ "decisions":[{"text":"...","at":"MM:SS or null"}],
+ "questions":[{"text":"...","at":"MM:SS or null"}],
+ "actions":[{"text":"...","owner":"SPEAKER 2 or null","at":"MM:SS or null"}]}
 
-Rules:
-- The abstract is two or three sentences. No preamble, no "In this meeting".
-- Every decision, question and action carries the timestamp it came from. If you
-  cannot point at a moment, leave the item out.
-- An action is something a person committed to do. Not a topic, not an idea.
-- Owners are speaker labels, never invented names.
-- Return empty arrays rather than inventing items.
+He was in this meeting and is catching up on it afterwards, or proving to
+himself he did not miss anything. Completeness matters more than brevity.
+
+The abstract:
+- Two or three sentences. No preamble, no "In this meeting".
+
+Topics:
+- Walk the meeting in order and give each subject its own entry.
+- The heading is a short noun phrase naming the subject. The text is two to four
+  sentences on what was actually said about it: who raised it, what was
+  concluded, what was left hanging.
+- A forty minute meeting usually has eight to fifteen of these. Do not compress
+  several subjects into one entry to be brief.
+
+Actions:
+- Anything anyone committed to doing. A commitment by the group counts and is
+  common: "the team will bring the metadata question to Thursday" is an action,
+  and dropping it because no single person said "I will" loses half the meeting.
+- Say who, when someone owns it. Use the speaker label, never an invented name.
+  Where the group owns it, leave the owner null and say "The team will ..." in
+  the text.
+- One action per commitment. Do not merge two into a sentence with "and".
+
+Decisions are things settled. Questions are things left open.
+
+Timestamps:
+- Give the timestamp where you can point at a moment.
+- Where a commitment or a conclusion built up over a stretch of talk and there
+  is no one moment, use null. DO NOT drop the item. A missing timestamp is a
+  smaller loss than a missing action, and this rule used to be the other way
+  round, which quietly deleted about half of every meeting.
+
+Never invent. An empty array is right when nothing of that kind happened, but
+"I could not timestamp it" is not the same as "it did not happen".
 
 TRANSCRIPT:
 """
@@ -146,12 +174,21 @@ TRANSCRIPT_SCHEMA = {
 _ITEM = {
     "type": "object",
     "properties": {"text": {"type": "string"}, "at": {"type": "string"}},
-    "required": ["text", "at"],
+    # "at" is deliberately not required. It used to be, which made an item the
+    # model could not place structurally invalid rather than merely untimed --
+    # so the schema was deleting real material and the prompt was telling it to.
+    "required": ["text"],
+}
+_TOPIC = {
+    "type": "object",
+    "properties": {"heading": {"type": "string"}, "text": {"type": "string"}},
+    "required": ["heading", "text"],
 }
 SUMMARY_SCHEMA = {
     "type": "object",
     "properties": {
         "abstract": {"type": "string"},
+        "topics": {"type": "array", "items": _TOPIC},
         "decisions": {"type": "array", "items": _ITEM},
         "questions": {"type": "array", "items": _ITEM},
         "actions": {
@@ -163,7 +200,7 @@ SUMMARY_SCHEMA = {
                     "owner": {"type": "string"},
                     "at": {"type": "string"},
                 },
-                "required": ["text", "at"],
+                "required": ["text"],
             },
         },
     },
@@ -426,8 +463,15 @@ class GeminiBackend(Backend):
         return _digest_from(payload)
 
     def summarise(self, transcript: Transcript) -> Summary:
-        raw = self._ask([{"type": "text", "text": SUMMARISE_PROMPT + transcript.as_text()}],
-                        schema=SUMMARY_SCHEMA)
+        # Swapped for this one call only. See config.GEMINI_SUMMARY_MODEL for
+        # why the cheap job is the one allowed the better model.
+        was, self.model = self.model, config.GEMINI_SUMMARY_MODEL
+        try:
+            raw = self._ask(
+                [{"type": "text", "text": SUMMARISE_PROMPT + transcript.as_text()}],
+                schema=SUMMARY_SCHEMA)
+        finally:
+            self.model = was
         try:
             payload = _json_from(raw)
         except (ValueError, json.JSONDecodeError):
@@ -445,6 +489,10 @@ class GeminiBackend(Backend):
         ]
         return Summary(
             abstract=(payload.get("abstract") or "").strip(),
+            topics=[{"heading": (r.get("heading") or "").strip(),
+                     "text": (r.get("text") or "").strip()}
+                    for r in payload.get("topics") or []
+                    if (r.get("heading") or "").strip() and (r.get("text") or "").strip()],
             decisions=pick(payload.get("decisions")),
             questions=pick(payload.get("questions")),
             actions=[
@@ -453,7 +501,7 @@ class GeminiBackend(Backend):
                  "at_ms": _ms(r.get("at"))}
                 for r in payload.get("actions") or [] if r.get("text")
             ],
-            model=self.model,
+            model=config.GEMINI_SUMMARY_MODEL,
         )
 
 

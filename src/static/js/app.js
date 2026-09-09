@@ -519,6 +519,35 @@ let sendFiles = null;
   });
 }
 
+/* ------------------------------------------------- summarise again */
+/* The summariser improves; the meetings already recorded should get the better
+   one. This never touches the audio -- transcription is priced by the length of
+   the recording and the transcript is already here, so re-reading the hour to
+   rewrite a page of text would be paying twice for nothing. */
+{
+  const go = $("#resummarise");
+  const msg = $("#resummsg");
+  const say = (t, bad) => { if (msg) { msg.textContent = t || "";
+                                       msg.classList.toggle("danger", !!bad); } };
+  go?.addEventListener("click", async () => {
+    go.disabled = true;
+    const was = go.textContent;
+    go.textContent = "Reading it again\u2026";
+    say("");
+    try {
+      const res = await send(`/meetings/${go.dataset.id}/resummarise`, { method: "POST" });
+      const out = await res.json().catch(() => ({}));
+      if (!res.ok) throw out;
+      say("Done");
+      setTimeout(() => location.reload(), 500);
+    } catch (e) {
+      say(e?.detail || "Could not do that just now.", true);
+      go.disabled = false;
+      go.textContent = was;
+    }
+  });
+}
+
 /* ------------------------------------------------------ detail: tabs */
 {
   const tabs = $$("[data-tab]");

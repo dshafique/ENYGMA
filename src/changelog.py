@@ -29,6 +29,19 @@ UNRELEASED = "UNRELEASED"
 
 RELEASES = [
     {
+        "mark": "Mk II.43",
+        "date": "2026-09-09",
+        "headline": "Summaries that keep what was said",
+        "items": [
+            "Meeting summaries now walk through what was discussed, subject by "
+            "subject, instead of three sentences and nothing else.",
+            "Action items are no longer dropped for having no clear moment or no "
+            "single owner. Things the team agreed to count.",
+            "Summarise again, on any meeting, rewrites the summary from the "
+            "transcript already stored. It never re-reads the audio.",
+        ],
+    },
+    {
         "mark": "Mk II.42",
         "date": "2026-09-05",
         "headline": "Your fingerprint works in the app",

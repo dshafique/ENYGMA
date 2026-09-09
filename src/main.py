@@ -497,6 +497,25 @@ def meeting_audio(recording_id: int, request: Request):
                         media_type=data["recording"]["mime"] or "audio/mpeg")
 
 
+@app.post("/meetings/{recording_id}/resummarise")
+def meeting_resummarise(recording_id: int, request: Request):
+    """Write the summary again from the transcript already stored.
+
+    Not a retry: the audio is never touched. Transcription is priced by the
+    length of the recording, so re-reading an hour of it to get a better summary
+    of text that is already here would be paying twice for nothing.
+    """
+    require_session(request)
+    from .pipeline import runner
+    try:
+        return runner.resummarise(recording_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=502,
+                            detail=f"Could not summarise that again: {exc}")
+
+
 @app.post("/meetings/{recording_id}/retry")
 def meeting_retry(recording_id: int, request: Request):
     require_session(request)

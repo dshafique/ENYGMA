@@ -90,8 +90,10 @@ def _write_results(recording_id: int, transcript, summary) -> None:
                 )
             conn.execute(
                 "INSERT OR REPLACE INTO summaries "
-                "(recording_id, abstract, decisions, questions, model) VALUES (?, ?, ?, ?, ?)",
-                (recording_id, summary.abstract, json.dumps(summary.decisions),
+                "(recording_id, abstract, topics, decisions, questions, model) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (recording_id, summary.abstract, json.dumps(summary.topics),
+                 json.dumps(summary.decisions),
                  json.dumps(summary.questions), summary.model),
             )
             for action in summary.actions:
@@ -146,6 +148,67 @@ def process_one(backend=None) -> dict | None:
                 (reason, job["id"]),
             )
         return {"id": job["id"], "status": "failed", "detail": reason}
+
+
+def resummarise(recording_id: int, backend=None) -> dict:
+    """Write the summary again from the transcript already on disk.
+
+    Transcription is the expensive half and it is priced by the length of the
+    audio; summarising is one pass over text that is already here. When the
+    summariser changes -- and it just did, because a rule in the prompt was
+    quietly deleting about half of every meeting -- every meeting already
+    recorded deserves the better one, and nobody should pay to transcribe an
+    hour of audio twice to get it.
+
+    The transcript, the speakers and the notes are untouched. Only the summary
+    and the action items are replaced.
+    """
+    from .base import Segment, Transcript
+    with cursor() as conn:
+        row = conn.execute("SELECT id, status FROM recordings WHERE id = ?",
+                           (recording_id,)).fetchone()
+        if row is None:
+            raise LookupError("No such recording")
+        rows = conn.execute(
+            "SELECT speaker_label, start_ms, end_ms, text FROM transcript_segments "
+            "WHERE recording_id = ? ORDER BY idx", (recording_id,)).fetchall()
+    if not rows:
+        raise LookupError("That meeting has no transcript to summarise")
+
+    transcript = Transcript(segments=[
+        Segment(speaker_label=r["speaker_label"], start_ms=r["start_ms"],
+                end_ms=r["end_ms"], text=r["text"]) for r in rows])
+
+    backend = backend or get_backend()
+    summary = backend.summarise(transcript)
+
+    with cursor() as conn:
+        conn.execute(
+            "INSERT OR REPLACE INTO summaries "
+            "(recording_id, abstract, topics, decisions, questions, model) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (recording_id, summary.abstract, json.dumps(summary.topics),
+             json.dumps(summary.decisions), json.dumps(summary.questions),
+             summary.model))
+        # Actions he has already ticked or turned down are his, not the
+        # model's. Rewriting those would undo real work, so only the untouched
+        # ones are replaced.
+        conn.execute("DELETE FROM action_items WHERE recording_id = ? "
+                     "AND state = 'open' AND state_note IS NULL", (recording_id,))
+        kept = {r["text"] for r in conn.execute(
+            "SELECT text FROM action_items WHERE recording_id = ?", (recording_id,))}
+        added = 0
+        for action in summary.actions:
+            if action["text"] in kept:
+                continue
+            conn.execute(
+                "INSERT INTO action_items (recording_id, text, owner, at_ms) "
+                "VALUES (?, ?, ?, ?)",
+                (recording_id, action["text"], action.get("owner"),
+                 action.get("at_ms")))
+            added += 1
+    return {"id": recording_id, "topics": len(summary.topics),
+            "actions": added, "kept": len(kept)}
 
 
 def _process_notes(job: dict, backend) -> dict:
