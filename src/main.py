@@ -11,7 +11,8 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
 
-from fastapi import FastAPI, Request, Response, HTTPException, UploadFile, File
+from fastapi import (FastAPI, Request, Response, HTTPException, UploadFile,
+                     File, Query)
 from fastapi.responses import (JSONResponse, HTMLResponse, RedirectResponse,
                                FileResponse, StreamingResponse)
 from fastapi.staticfiles import StaticFiles
@@ -24,6 +25,7 @@ from .ingest import poller, upload, notes as notes_ingest
 from .pipeline import runner
 from .export import as_markdown
 from . import weeknote, documents
+from . import suggestions as suggestions_repo
 from . import bench as bench_repo
 from . import models
 from . import attachments
@@ -631,12 +633,51 @@ def library_search(q: str, request: Request):
 # action items, directory, settings
 # --------------------------------------------------------------------------
 @app.get("/actions", response_class=HTMLResponse)
-def actions_page(request: Request, who: str | None = None):
+def actions_page(request: Request, who: list[str] = Query(default=[])):
+    """?who= repeats, because he is usually asking about two targets at once."""
     if current(request) is None:
         return RedirectResponse("/lock", status_code=302)
     return page(request, "actions.html", "actions",
                 {"data": actions_repo.listing(who=who),
-                 "whos": actions_repo.WHO})
+                 "going_spare": suggestions_repo.count()})
+
+
+@app.get("/suggestions", response_class=HTMLResponse)
+def suggestions_page(request: Request):
+    """Its own surface, deliberately. A suggestion appears here and nowhere
+    else -- not in All, not under a person, not in a count, not on Home -- so
+    nothing he opens out of habit ever contains one."""
+    if current(request) is None:
+        return RedirectResponse("/lock", status_code=302)
+    return page(request, "suggestions.html", "actions",
+                {"offers": suggestions_repo.offered()})
+
+
+@app.post("/suggestions/look")
+def suggestions_look(request: Request):
+    require_session(request)
+    try:
+        return suggestions_repo.look()
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Could not look just now: {exc}")
+
+
+@app.post("/suggestions/{suggestion_id}/take")
+def suggestions_take(suggestion_id: int, request: Request):
+    """It stops being a guess and becomes an action item with his name on it."""
+    require_session(request)
+    out = suggestions_repo.take(suggestion_id)
+    if out is None:
+        raise HTTPException(status_code=404, detail="That is not on the table")
+    return out
+
+
+@app.post("/suggestions/{suggestion_id}/pass")
+def suggestions_pass(suggestion_id: int, request: Request):
+    require_session(request)
+    if not suggestions_repo.pass_on(suggestion_id):
+        raise HTTPException(status_code=404, detail="That is not on the table")
+    return {"ok": True}
 
 
 @app.get("/directory", response_class=HTMLResponse)

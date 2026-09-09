@@ -79,8 +79,10 @@ Actions:
   common: "the team will bring the metadata question to Thursday" is an action,
   and dropping it because no single person said "I will" loses half the meeting.
 - Say who, when someone owns it. Use the speaker label, never an invented name.
-  Where the group owns it, leave the owner null and say "The team will ..." in
-  the text.
+- Where the group took it on together, set the owner to exactly THE TEAM and say
+  "The team will ..." in the text. That is different from nobody having picked it
+  up, which is owner null, and the two must not be muddled: one is work that is
+  owned and one is work that is going spare.
 - One action per commitment. Do not merge two into a sentence with "and".
 
 Decisions are things settled. Questions are things left open.

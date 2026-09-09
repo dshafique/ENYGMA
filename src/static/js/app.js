@@ -519,6 +519,67 @@ let sendFiles = null;
   });
 }
 
+/* ------------------------------------------------------------- nobody's */
+/* Taking one is the only way a guess becomes a commitment, and it is a
+   deliberate press. Passing keeps it rather than deleting it, so the next look
+   does not offer the same thing back and make the surface feel deaf. */
+{
+  const say = (id, text, bad) => {
+    const el = document.querySelector(`[data-msg="${id}"]`);
+    if (!el) return;
+    el.textContent = text || "";
+    el.classList.toggle("danger", !!bad);
+  };
+
+  $$("[data-take]").forEach((b) => b.addEventListener("click", async () => {
+    const id = b.dataset.take;
+    b.disabled = true;
+    try {
+      await post(`/suggestions/${id}/take`, {});
+      say(id, "On your list");
+      setTimeout(() => location.reload(), 700);
+    } catch (e) {
+      say(id, e?.data?.detail || "Could not do that.", true);
+      b.disabled = false;
+    }
+  }));
+
+  $$("[data-pass]").forEach((b) => b.addEventListener("click", async () => {
+    const id = b.dataset.pass;
+    b.disabled = true;
+    try {
+      await post(`/suggestions/${id}/pass`, {});
+      document.querySelector(`[data-offer="${id}"]`)?.classList.add("gone");
+      say(id, "Put away");
+      setTimeout(() => location.reload(), 700);
+    } catch (e) {
+      say(id, e?.data?.detail || "Could not do that.", true);
+      b.disabled = false;
+    }
+  }));
+
+  const look = $("#look");
+  const lookmsg = $("#lookmsg");
+  look?.addEventListener("click", async () => {
+    look.disabled = true;
+    const was = look.textContent;
+    look.textContent = "Reading your meetings\u2026";
+    if (lookmsg) lookmsg.textContent = "";
+    try {
+      const res = await send("/suggestions/look", { method: "POST" });
+      const out = await res.json().catch(() => ({}));
+      if (!res.ok) throw out;
+      if (out.found) { location.reload(); return; }
+      if (lookmsg) lookmsg.textContent = out.why || "Nothing going spare.";
+    } catch (e) {
+      if (lookmsg) { lookmsg.textContent = e?.detail || "Could not look just now.";
+                     lookmsg.classList.add("danger"); }
+    }
+    look.disabled = false;
+    look.textContent = was;
+  });
+}
+
 /* ------------------------------------------------- summarise again */
 /* The summariser improves; the meetings already recorded should get the better
    one. This never touches the audio -- transcription is priced by the length of

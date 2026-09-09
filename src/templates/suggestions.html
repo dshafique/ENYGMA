@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}Nobody's — ENYGMA{% endblock %}
+{% block main %}
+{# A surface of its own, reached on purpose. A suggestion appears here and
+   nowhere else: not in All, not under a person, not in any count, not on Home.
+   He cannot stumble on one, which is a stronger guarantee than anything the
+   styling below can offer. #}
+<header class="topbar">
+  <div class="grow">
+    <h1>Nobody's</h1>
+    <p class="sub">Work the meetings left on the floor</p>
+  </div>
+</header>
+
+<div class="page measure">
+
+  {# Not dismissible and not collapsible. It is the first thing on the surface
+     every single time, because the risk this feature carries is him telling
+     someone he is doing a thing nobody asked for. #}
+  <div class="nobodyhead">
+    <span class="label">Nobody asked for these</span>
+    <p><strong>ENYGMA noticed these and nobody has picked them up.</strong>
+      They are not assigned to you and they are not on anyone's list. Check the
+      meeting before you act on one, and do not tell anybody you are doing it
+      until you have decided to. The judgement here is a guess. Yours is better.</p>
+  </div>
+
+  {% if offers %}
+  <div class="offers">
+    {% for o in offers %}
+    {# Folded shut. The closed state carries a subject and no instruction at
+       all, so reading one is a decision rather than an accident. #}
+    <details class="offer" data-offer="{{ o.id }}">
+      <summary>
+        <span class="tag">Nobody's</span>
+        <span class="head">{{ o.gap }}</span>
+      </summary>
+      <div class="offerbody">
+        {% if o.why %}<p class="why">{{ o.why }}</p>{% endif %}
+        {# "You could", never an imperative. Read out of context, over a
+           shoulder, on a lock screen, it still does not tell him to do
+           anything. #}
+        <p class="could">You could {{ o.could[0]|lower }}{{ o.could[1:] }}</p>
+        <p class="cite">
+          {% if o.meeting %}<a href="/meetings/{{ o.recording_id }}">{{ o.meeting }}</a>{% else %}a meeting{% endif %}
+          {%- if o.at_ms is not none %} · {{ o.at_ms|mmss }}{% endif %}</p>
+        <div class="offeract">
+          <button class="btn line sm" data-take="{{ o.id }}">Put it on my list</button>
+          <button class="btn ghost sm" data-pass="{{ o.id }}">Not for me</button>
+          <span class="msg dim" data-msg="{{ o.id }}"></span>
+        </div>
+      </div>
+    </details>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="empty"><div class="cell"></div>
+    <p>Nothing going spare. Either every loose end has an owner, or nobody has
+       looked yet.</p></div>
+  {% endif %}
+
+  <div class="spread" style="margin-top:var(--space-24)">
+    <button class="btn line sm" id="look">Look again</button>
+    <span class="msg dim" id="lookmsg"></span>
+  </div>
+  <p class="dim" style="font-size:12px;margin-top:var(--space-8)">
+    Reads your last few meetings and writes down what nothing is holding. It
+    costs one model call, so it only happens when you press it.</p>
+
+</div>
+{% endblock %}

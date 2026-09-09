@@ -533,6 +533,48 @@ h3 { font-size: 15px; font-weight: 600; margin: 0; }
 .topic h3 { margin: 0; font-size: 15px; line-height: 22px; color: var(--text); }
 .topic p { margin: 0; color: var(--text-dim); }
 
+/* ======================================================================
+   Nobody's -- work the meetings left on the floor.
+
+   These are guesses, and the one thing they must never do is read as work he
+   owes: acting on an invented obligation in front of the people he is trying to
+   impress is the failure this whole surface has to avoid. So nothing here
+   shares a property with an action item. No square row, no state control, no
+   filled button, dimmer text, a dashed edge, and shut by default -- the closed
+   state carries a subject and no instruction at all.
+   ====================================================================== */
+/* The way in, and the only place on the Actions page a suggestion is mentioned.
+   Dashed, because it leads somewhere that is not a list of obligations. */
+.chip.spare { border-style: dashed; border-color: var(--border-strong);
+              background: transparent; }
+
+.nobodyhead { border: 1px dashed var(--border-strong); border-radius: var(--radius-md);
+              padding: var(--space-16); margin-bottom: var(--space-24); }
+.nobodyhead .label { display: block; margin-bottom: var(--space-6); }
+.nobodyhead p { margin: 0; color: var(--text-dim); font-size: 13.5px; line-height: 1.6; }
+.nobodyhead strong { color: var(--text); font-weight: 600; }
+
+.offers { display: flex; flex-direction: column; gap: var(--space-12); }
+.offer { border: 1px dashed var(--border-strong); border-radius: var(--radius-md);
+         background: transparent; }
+.offer summary { list-style: none; cursor: pointer; padding: var(--space-12) var(--space-16);
+                 display: flex; gap: var(--space-12); align-items: baseline; }
+.offer summary::-webkit-details-marker { display: none; }
+.offer .tag { flex: none; font-family: var(--font-mono); font-size: 10px;
+              letter-spacing: .1em; text-transform: uppercase; color: var(--text-muted); }
+.offer .head { color: var(--text-dim); font-size: 14px; line-height: 21px; }
+.offer[open] .head { color: var(--text); }
+.offerbody { padding: var(--space-12) var(--space-16) var(--space-16);
+             border-top: 1px dashed var(--border-divider); }
+.offerbody .why { margin: 0 0 var(--space-8); color: var(--text-dim); font-size: 14px; }
+.offerbody .could { margin: 0 0 var(--space-8); color: var(--text-muted);
+                    font-size: 13.5px; font-style: italic; }
+.offerbody .cite { margin: 0; font-family: var(--font-mono); font-size: 11px;
+                   color: var(--text-muted); }
+.offeract { display: flex; gap: var(--space-8); align-items: center;
+            flex-wrap: wrap; margin-top: var(--space-12); }
+.offer.gone { opacity: .45; }
+
 pre.doc {
   white-space: pre-wrap; word-wrap: break-word; font-family: var(--font-prose);
   font-size: 14px; line-height: 22px; color: var(--text-dim);

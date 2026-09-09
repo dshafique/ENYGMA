@@ -25,25 +25,36 @@
     <p class="sub">
       {{ data.open|length }} open · {{ data.pending|length }} pending ·
       {{ data.done|length }} done · {{ data.rejected|length }} rejected
-      {%- if data.who %} · {{ data.who }}{% endif %}</p>
+      {%- if data.picked %} · {{ data.picked|join(", ") }}{% endif %}</p>
   </div>
 </header>
 
 <div class="page measure">
   {% if data.all_total %}
-  <div class="benchfilters">
-    <a class="chip{{ ' on' if not data.who }}" href="/actions">All
+  {# Every chip is a link that toggles itself in or out of the selection. No
+     JavaScript: the URL is the state, so a view he wants is a link he can keep. #}
+  <div class="benchfilters targets">
+    <a class="chip{{ ' on' if not data.picked }}" href="/actions">Everyone
       <span class="n">{{ data.all_total }}</span></a>
-    {% for key, label in whos %}
-    <a class="chip{{ ' on' if data.who == key }}" href="/actions?who={{ key }}">{{ label }}
-      <span class="n">{{ data.tally[key] }}</span></a>
+    {% for t in data.targets %}
+    {% set chosen = t.key in data.picked %}
+    <a class="chip{{ ' on' if chosen }}"
+       href="/actions?{% for w in data.picked if w != t.key %}who={{ w|urlencode }}&{% endfor %}{% if not chosen %}who={{ t.key|urlencode }}{% endif %}"
+       >{{ t.label }} <span class="n">{{ t.count }}</span></a>
     {% endfor %}
+    {# Links away rather than filtering in place. Suggestions never appear in
+       this list, whatever is selected -- that is the guarantee, and a chip that
+       filtered them in here would break it. #}
+    {% if going_spare %}
+    <a class="chip spare" href="/suggestions">Nobody's
+      <span class="n">{{ going_spare }}</span></a>
+    {% endif %}
   </div>
   {% if not data.knows_him %}
   <p class="dim" style="font-size:13px;margin:0 0 var(--space-20)">
-    ENYGMA does not know which of these people is you, so <em>Mine</em> is only
-    showing what nobody else owns. Set <span class="mono">ENYGMA_OWNER_NAME</span>
-    to the name you gave yourself in the Directory.</p>
+    ENYGMA does not know which of these people is you. Set
+    <span class="mono">ENYGMA_OWNER_NAME</span> to the name you gave yourself in
+    the Directory and yours moves to the front.</p>
   {% endif %}
   {% endif %}
   {% if data.total %}
@@ -62,9 +73,10 @@
         <p class="dim" style="font-size:14px">{{ empty }}</p></div>
       {% endif %}
     {% endfor %}
-  {% elif data.who %}
+  {% elif data.picked %}
     <div class="empty"><div class="cell"></div>
-      <p>Nothing under {{ data.who }}. <a href="/actions">Show everything</a>.</p></div>
+      <p>Nothing for {{ data.picked|join(", ") }}.
+         <a href="/actions">Show everyone</a>.</p></div>
   {% else %}
     <div class="empty"><div class="cell"></div>
       <p>Nothing here. Actions are pulled out of each meeting when it is

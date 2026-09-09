@@ -344,11 +344,16 @@ def test_the_number_leads_the_line_so_the_column_can_be_scanned():
     assert "text-indent: -3.1em" in css, "a wrapped line runs back under the number"
 
 
-# ---------------------------------------------------- mine, theirs, ours
+# ------------------------------------------------------------- targets
+#
+# Mine and Theirs was too blunt, and it also made a decision that was his: whether
+# the team's work counts as his own. Targets put that back in his hands -- the
+# team is a target like any other, so "mine and ours" is a selection rather than
+# a rule baked into the code.
 
 def _seed_actions():
-    """One of his, one of Joseph's, one the team took on together."""
-    from src import db
+    """His, Joseph's, one the team took on, and one nobody has picked up."""
+    from src import db, actions
     with db.cursor() as conn:
         conn.execute("INSERT INTO recordings (title, status) VALUES ('LEAF stand up','ready')")
         rid = conn.execute("SELECT last_insert_rowid() AS i").fetchone()["i"]
@@ -358,74 +363,74 @@ def _seed_actions():
                          "person_name) VALUES (?, ?, 1, ?)", (rid, label, name))
         for text, owner in (("Set up the Atlas sensors", "SPEAKER 1"),
                             ("Build the camera module", "SPEAKER 2"),
-                            ("The team will revisit the metadata design", None)):
+                            ("The team will revisit the metadata design", actions.TEAM),
+                            ("Nobody has looked at image expiry", None)):
             conn.execute("INSERT INTO action_items (recording_id, text, owner) "
                          "VALUES (?, ?, ?)", (rid, text, owner))
     return rid
 
 
-def test_what_is_his_includes_what_the_team_took_on():
-    """A meeting produces a run of commitments the group made together. Those
-    are his to chase as much as anything with his name on it, and a filter that
-    filed them under Theirs would hide half of what he actually owes."""
+def _texts(rows):
+    return sorted(a["text"] for a in rows["open"])
+
+
+def test_the_team_is_a_target_of_its_own_not_a_synonym_for_nobody():
+    """The whole suggestions surface rests on this. Work the group took on is
+    owned; work nobody picked up is going spare. Muddling them would put real
+    commitments in the pile of things he might volunteer for."""
+    from src import actions
+    _seed_actions()
+    keys = {t["key"] for t in actions.targets()}
+    assert actions.TEAM in keys and actions.UNCLAIMED in keys
+
+    team = actions.listing(who=[actions.TEAM])
+    assert _texts(team) == ["The team will revisit the metadata design"]
+    spare = actions.listing(who=[actions.UNCLAIMED])
+    assert _texts(spare) == ["Nobody has looked at image expiry"]
+
+
+def test_two_targets_at_once():
+    """The point of the change: he asks about his own work and the team's in one
+    view, and that is his choice to make rather than mine."""
     from src import actions
     from src.config import config
-    _seed_actions()
     was = config.OWNER_NAME
     config.OWNER_NAME = "Yahya Shafique"
     try:
-        mine = actions.listing(who="mine")
-        texts = [a["text"] for a in mine["open"]]
-        assert "Set up the Atlas sensors" in texts
-        assert "The team will revisit the metadata design" in texts
-        assert "Build the camera module" not in texts
-
-        theirs = actions.listing(who="theirs")
-        assert [a["text"] for a in theirs["open"]] == ["Build the camera module"]
+        both = actions.listing(who=["Yahya Shafique", actions.TEAM])
+        assert _texts(both) == ["Set up the Atlas sensors",
+                               "The team will revisit the metadata design"]
     finally:
         config.OWNER_NAME = was
 
 
-def test_the_counts_do_not_move_with_the_filter():
+def test_nothing_picked_shows_everyone():
+    """An empty selection reads as "no filter", which saves him a Clear button."""
+    from src import actions
+    assert actions.listing(who=[])["total"] == actions.listing()["all_total"]
+
+
+def test_the_counts_do_not_move_with_the_selection():
     """This went wrong on the Bench once already. A count that changes when you
     filter is not a count."""
     from src import actions
-    from src.config import config
-    was = config.OWNER_NAME
-    config.OWNER_NAME = "Yahya Shafique"
-    try:
-        everything = actions.listing()
-        filtered = actions.listing(who="mine")
-        assert filtered["tally"] == everything["tally"]
-        assert filtered["all_total"] == everything["all_total"]
-        assert filtered["total"] < filtered["all_total"]
-    finally:
-        config.OWNER_NAME = was
+    everything = actions.listing()
+    filtered = actions.listing(who=[actions.TEAM])
+    assert filtered["targets"] == everything["targets"]
+    assert filtered["all_total"] == everything["all_total"]
+    assert filtered["total"] < filtered["all_total"]
 
 
-def test_the_name_is_matched_however_it_is_capitalised():
+def test_his_own_name_comes_first_and_is_called_me():
+    """It is his list. His name is the one he looks for, so it does not make him
+    hunt for it among four others."""
     from src import actions
     from src.config import config
     was = config.OWNER_NAME
-    config.OWNER_NAME = "yahya shafique"
+    config.OWNER_NAME = "yahya shafique"          # however he capitalised it
     try:
-        assert any(a["text"] == "Set up the Atlas sensors"
-                   for a in actions.listing(who="mine")["open"])
-    finally:
-        config.OWNER_NAME = was
-
-
-def test_without_a_name_it_says_so_rather_than_pretending():
-    """Silently showing him everything under Mine would be a filter that lies."""
-    from src import actions
-    from src.config import config
-    was = config.OWNER_NAME
-    config.OWNER_NAME = ""
-    try:
-        out = actions.listing(who="mine")
-        assert out["knows_him"] is False
-        # Only the unowned ones, which is the honest answer with no name set.
-        assert [a["text"] for a in out["open"]] == \
-            ["The team will revisit the metadata design"]
+        first = actions.targets()[0]
+        assert first["label"] == "Me"
+        assert first["count"] == 1
     finally:
         config.OWNER_NAME = was
