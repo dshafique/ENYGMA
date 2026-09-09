@@ -29,6 +29,19 @@ UNRELEASED = "UNRELEASED"
 
 RELEASES = [
     {
+        "mark": "Mk II.48",
+        "date": "2026-09-09",
+        "headline": "Recording survives your pocket",
+        "items": [
+            "Recording no longer stops when the screen goes off. Press record, "
+            "put the phone away, press stop at the end. Needs the app updated "
+            "to 1.3.",
+            "A notification shows while it is recording, so you can always see "
+            "that it is still going. If notifications are switched off the app "
+            "now says so before you lose anything.",
+        ],
+    },
+    {
         "mark": "Mk II.46",
         "date": "2026-09-09",
         "headline": "Whose is it, and what nobody has",

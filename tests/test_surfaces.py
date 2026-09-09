@@ -3,7 +3,7 @@
 Written after shipping a shell with only two screens in it: a page that no test
 requests is a page nobody has looked at.
 """
-import os, sys, pathlib, tempfile
+import os, re, sys, pathlib, tempfile
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 os.environ.setdefault("ENYGMA_SESSION_SECRET", "test-secret")
@@ -898,6 +898,69 @@ def test_the_build_notes_say_the_two_things_cap_sync_cannot_do():
     assert 'android:screenOrientation="unspecified"' in notes
     assert "FOREGROUND_SERVICE_MICROPHONE" in notes
     assert "RECORD_AUDIO" in notes
+
+
+def test_the_icon_the_recording_notification_asks_for_exists():
+    """The scar that made the native shell pointless for four releases.
+
+    app.js passes smallIcon "ic_stat_icon". The plugin turns that name into a
+    drawable id, gets 0 when there is no such drawable, and builds a notification
+    with setSmallIcon(0), which Android refuses. startForeground then throws
+    inside the service on another thread, long after startForegroundService has
+    resolved the promise, and the plugin logs it and returns START_STICKY. So the
+    service ran, was never a foreground service, the recording died with the
+    screen, and no error reached the app or the user.
+
+    android/ is generated and not in this repository, so the file is kept here
+    and copied in. This test is the only thing standing between a regenerated
+    android/ and the bug coming straight back.
+    """
+    root = pathlib.Path(__file__).resolve().parent.parent
+    js = (root / "src/static/js/app.js").read_text()
+    wanted = re.findall(r'smallIcon:\s*"([^"]+)"', js)
+    assert wanted, "the recorder no longer names a status bar icon"
+    for name in set(wanted):
+        icon = root / "native/capacitor/android-res/drawable" / f"{name}.xml"
+        assert icon.exists(), (
+            f"app.js asks for the drawable {name} and it is not in the repo, so "
+            "the notification cannot be posted and recording will not survive "
+            "the screen")
+        body = icon.read_text()
+        assert "<vector" in body and "pathData" in body
+        # Status bar icons are tinted by Android; anything but a white
+        # silhouette on transparency comes out wrong or invisible.
+        assert "#FFFFFFFF" in body
+
+
+def test_the_recording_notification_does_not_trust_the_plugin_defaults():
+    """Three failures of the same shape, all silent, all behind the icon.
+
+    POST_NOTIFICATIONS is a runtime grant on Android 13 and up and declaring it
+    in the manifest does not give it. The plugin creates its "default" channel
+    only when the device has no channels at all, which stops being true the
+    moment local-notifications makes one, so the notification goes to a channel
+    that does not exist. And a microphone foreground service on Android 14 and up
+    should be started as one rather than left to the manifest.
+    """
+    block = _chat_js()
+    assert "Service.requestPermissions()" in block, \
+        "notification permission is never asked for, so on Android 13+ there is no notification"
+    assert "createNotificationChannel" in block, \
+        "it relies on the plugin's default channel, which a real phone never has"
+    assert 'notificationChannelId: "recording"' in block, \
+        "it makes a channel and then does not post to it"
+    assert "serviceType: 128" in block, \
+        "128 is FOREGROUND_SERVICE_TYPE_MICROPHONE; without it the type comes from the manifest"
+
+
+def test_he_is_told_when_the_recording_will_not_survive_the_screen():
+    """A resolved promise proves nothing here, so the warning is on the
+    preconditions. Losing an hour of meeting is bad; losing it silently and
+    finding out afterwards is much worse."""
+    block = _chat_js()
+    assert "screen goes off" in block
+    say = block[block.index("if (!allowed)"):]
+    assert "say(" in say and "true)" in say, "the warning is not shown as a problem"
 
 
 def test_the_friday_reminder_is_scheduled_from_one_source_of_truth():

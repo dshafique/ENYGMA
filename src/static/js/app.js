@@ -382,6 +382,64 @@ let sendFiles = null;
     const Rec = plugins.AudioRecorder;
     const Files = plugins.Filesystem;
     const Service = plugins.ForegroundService;
+
+    /* The ongoing notification is the only thing that stops Android suspending
+       the process, so it is the whole reason the native shell exists. Getting it
+       up takes three steps that all used to be missing, and every one of them
+       failed silently.
+
+       Notification permission. On Android 13 and up POST_NOTIFICATIONS is a
+       runtime grant and nothing was ever asking for it. Declaring it in the
+       manifest does not grant it.
+
+       Our own channel. The plugin creates its "default" channel only when the
+       device has no notification channels at all, and local-notifications makes
+       one, so on a real phone the default is never created and the notification
+       is posted to a channel that does not exist.
+
+       The service type, passed explicitly. The plugin falls back to the two
+       argument startForeground when no type is given; on Android 14 and up a
+       microphone service wants to be started as one. 128 is
+       FOREGROUND_SERVICE_TYPE_MICROPHONE.
+
+       What cannot be done here is confirm it worked. startForegroundService
+       resolves as soon as the intent is dispatched, and the notification is
+       built later, inside the service, on another thread. If it throws there the
+       plugin logs it to logcat and returns START_STICKY, so a resolved promise
+       is not evidence of anything. That is why the check below is on the
+       preconditions rather than on the result, and why a refused notification is
+       said out loud: a recording that will die with the screen is worth knowing
+       about before the meeting, not after it. */
+    async function guard() {
+      let allowed = true;
+      try {
+        const perm = await Service.requestPermissions();
+        allowed = !perm || perm.display !== "denied";
+      } catch (e) { /* older plugin or older Android; carry on and try */ }
+
+      try {
+        await Service.createNotificationChannel({
+          id: "recording", name: "Recording",
+          description: "Shown while ENYGMA is recording a meeting.",
+          importance: 3,
+        });
+      } catch (e) { /* already exists, or below Android 8 */ }
+
+      try {
+        await Service.startForegroundService({
+          notificationChannelId: "recording",
+          id: 4073, title: "ENYGMA", body: "Recording this meeting",
+          smallIcon: "ic_stat_icon", serviceType: 128, silent: true,
+        });
+      } catch (e) {
+        allowed = false;
+      }
+
+      if (!allowed) {
+        say("Recording, but allow ENYGMA notifications or it will stop when the screen goes off.", true);
+      }
+    }
+
     return {
       supported: !!(Rec && Files),
       async start() {
@@ -390,16 +448,7 @@ let sendFiles = null;
           throw new Error("The microphone is not allowed. Turn it on in Android settings.");
         }
         await Rec.startRecording();
-        // The notification is what stops Android killing the process. Without
-        // it the recording ends when the screen does, silently.
-        if (Service) {
-          try {
-            await Service.startForegroundService({
-              id: 4073, title: "ENYGMA", body: "Recording this meeting",
-              smallIcon: "ic_stat_icon",
-            });
-          } catch (e) { /* recording still works in the foreground */ }
-        }
+        if (Service) await guard();
       },
       pause() { Rec.pauseRecording && Rec.pauseRecording(); },
       resume() { Rec.resumeRecording && Rec.resumeRecording(); },
